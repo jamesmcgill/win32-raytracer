@@ -11,16 +11,20 @@ using namespace DirectX;
 
 using Microsoft::WRL::ComPtr;
 
+//------------------------------------------------------------------------------
 Game::Game() noexcept(false)
 {
   m_deviceResources = std::make_unique<DX::DeviceResources>();
   m_deviceResources->RegisterDeviceNotify(this);
 }
 
+//------------------------------------------------------------------------------
 // Initialize the Direct3D resources required to run.
+//------------------------------------------------------------------------------
 void
 Game::Initialize(HWND window, int width, int height)
 {
+  m_hwnd = window;
   m_deviceResources->SetWindow(window, width, height);
 
   m_deviceResources->CreateDeviceResources();
@@ -36,10 +40,33 @@ Game::Initialize(HWND window, int width, int height)
   m_timer.SetFixedTimeStep(true);
   m_timer.SetTargetElapsedSeconds(1.0 / 60);
   */
+
+  ImGui::CreateContext();
+  ImGui_ImplWin32_Init(window);
+  ImGui_ImplDX11_Init(
+    m_deviceResources->GetD3DDevice(),
+    m_deviceResources->GetD3DDeviceContext());
+
+  // TODO: Fill optional settings of the io structure later.
+  // TODO: Load fonts if you don't want to use the default font.
 }
 
+//------------------------------------------------------------------------------
+void
+Game::ShutDown()
+{
+  ImGui_ImplDX11_Shutdown();
+  ImGui_ImplWin32_Shutdown();
+  ImGui::DestroyContext();
+}
+
+//------------------------------------------------------------------------------
+
 #pragma region Frame Update
+
+//------------------------------------------------------------------------------
 // Executes the basic game loop.
+//------------------------------------------------------------------------------
 void
 Game::Tick()
 {
@@ -48,7 +75,9 @@ Game::Tick()
   Render();
 }
 
+//------------------------------------------------------------------------------
 // Updates the world.
+//------------------------------------------------------------------------------
 void
 Game::Update(DX::StepTimer const& timer)
 {
@@ -60,7 +89,9 @@ Game::Update(DX::StepTimer const& timer)
 #pragma endregion
 
 #pragma region Frame Render
+//------------------------------------------------------------------------------
 // Draws the scene.
+//------------------------------------------------------------------------------
 void
 Game::Render()
 {
@@ -73,10 +104,26 @@ Game::Render()
   Clear();
 
   m_deviceResources->PIXBeginEvent(L"Render");
+
+  // Call NewFrame(), after this point you can use ImGui::* functions anytime
+  // (So you want to try calling Newframe() as early as you can in your
+  // mainloop to be able to use imgui everywhere)
+  ImGui_ImplDX11_NewFrame();
+  ImGui_ImplWin32_NewFrame();
+  ImGui::NewFrame();
+  ImGui::Text("Hello, world!");
+
   // auto context = m_deviceResources->GetD3DDeviceContext();
 
   // TODO: Add your rendering code here.
   // context;
+
+  // Render imgui, swap buffers
+  // (You want to try calling EndFrame/Render as late as you can, to be able
+  // to use imgui in your own game rendering code)
+  ImGui::EndFrame();
+  ImGui::Render();
+  ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
   m_deviceResources->PIXEndEvent();
 
@@ -84,7 +131,9 @@ Game::Render()
   m_deviceResources->Present();
 }
 
+//------------------------------------------------------------------------------
 // Helper method to clear the back buffers.
+//------------------------------------------------------------------------------
 void
 Game::Clear()
 {
@@ -109,25 +158,30 @@ Game::Clear()
 #pragma endregion
 
 #pragma region Message Handlers
+//------------------------------------------------------------------------------
 // Message handlers
+//------------------------------------------------------------------------------
 void
 Game::OnActivated()
 {
   // TODO: Game is becoming active window.
 }
 
+//------------------------------------------------------------------------------
 void
 Game::OnDeactivated()
 {
   // TODO: Game is becoming background window.
 }
 
+//------------------------------------------------------------------------------
 void
 Game::OnSuspending()
 {
   // TODO: Game is being power-suspended (or minimized).
 }
 
+//------------------------------------------------------------------------------
 void
 Game::OnResuming()
 {
@@ -136,6 +190,7 @@ Game::OnResuming()
   // TODO: Game is being power-resumed (or returning from minimize).
 }
 
+//------------------------------------------------------------------------------
 void
 Game::OnWindowMoved()
 {
@@ -143,6 +198,7 @@ Game::OnWindowMoved()
   m_deviceResources->WindowSizeChanged(r.right, r.bottom);
 }
 
+//------------------------------------------------------------------------------
 void
 Game::OnWindowSizeChanged(int width, int height)
 {
@@ -150,11 +206,11 @@ Game::OnWindowSizeChanged(int width, int height)
     return;
 
   CreateWindowSizeDependentResources();
-
-  // TODO: Game window is being resized.
 }
 
+//------------------------------------------------------------------------------
 // Properties
+//------------------------------------------------------------------------------
 void
 Game::GetDefaultSize(int& width, int& height) const
 {
@@ -165,30 +221,32 @@ Game::GetDefaultSize(int& width, int& height) const
 #pragma endregion
 
 #pragma region Direct3D Resources
+//------------------------------------------------------------------------------
 // These are the resources that depend on the device.
+//------------------------------------------------------------------------------
 void
 Game::CreateDeviceDependentResources()
 {
-  // auto device = m_deviceResources->GetD3DDevice();
-
-  // TODO: Initialize device dependent objects here (independent of window
-  // size).
-  // device;
+  ImGui_ImplDX11_CreateDeviceObjects();
 }
 
+//------------------------------------------------------------------------------
 // Allocate all memory resources that change on a window SizeChanged event.
+//------------------------------------------------------------------------------
 void
 Game::CreateWindowSizeDependentResources()
 {
   // TODO: Initialize windows-size dependent objects here.
 }
 
+//------------------------------------------------------------------------------
 void
 Game::OnDeviceLost()
 {
-  // TODO: Add Direct3D resource cleanup here.
+  ImGui_ImplDX11_InvalidateDeviceObjects();
 }
 
+//------------------------------------------------------------------------------
 void
 Game::OnDeviceRestored()
 {
@@ -196,4 +254,6 @@ Game::OnDeviceRestored()
 
   CreateWindowSizeDependentResources();
 }
+
+//------------------------------------------------------------------------------
 #pragma endregion

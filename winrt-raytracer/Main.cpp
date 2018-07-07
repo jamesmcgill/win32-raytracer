@@ -13,6 +13,8 @@ std::unique_ptr<Game> g_game;
 };
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
+  HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 // Indicates to hybrid graphics systems to prefer the discrete part by default
 extern "C" {
@@ -20,7 +22,9 @@ __declspec(dllexport) DWORD NvOptimusEnablement                = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
+//------------------------------------------------------------------------------
 // Entry point
+//------------------------------------------------------------------------------
 int WINAPI
 wWinMain(
   _In_ HINSTANCE hInstance,
@@ -124,10 +128,17 @@ wWinMain(
   return (int)msg.wParam;
 }
 
+//------------------------------------------------------------------------------
 // Windows procedure
+//------------------------------------------------------------------------------
 LRESULT CALLBACK
 WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+  if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
+  {
+    return true;
+  }
+
   PAINTSTRUCT ps;
   HDC hdc;
 
@@ -301,7 +312,9 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
   return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
+//------------------------------------------------------------------------------
 // Exit helper
+//------------------------------------------------------------------------------
 void
 ExitGame()
 {

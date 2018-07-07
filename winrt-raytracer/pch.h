@@ -66,6 +66,7 @@
 
 #include <DirectXMath.h>
 #include <DirectXColors.h>
+#include <d3dcompiler.h>
 
 #include <algorithm>
 #include <exception>
@@ -97,6 +98,10 @@
 #include "SpriteFont.h"
 #include "VertexTypes.h"
 #include "WICTextureLoader.h"
+
+#include "imgui-1.62/imgui.h"
+#include "imgui-1.62/imgui_impl_dx11.h"
+#include "imgui-1.62/imgui_impl_win32.h"
 
 namespace DX
 {

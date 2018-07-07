@@ -20,6 +20,7 @@ public:
 
   // Initialization and management
   void Initialize(HWND window, int width, int height);
+  void ShutDown();
 
   // Basic game loop
   void Tick();
@@ -53,4 +54,6 @@ private:
 
   // Rendering loop timer.
   DX::StepTimer m_timer;
+
+  HWND m_hwnd = nullptr;
 };
