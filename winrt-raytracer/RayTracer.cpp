@@ -66,14 +66,38 @@ RayTracer::saveImage(const Image& image, const std::string& fileName) const
 }
 
 //------------------------------------------------------------------------------
+bool
+hit_sphere(
+  const DirectX::SimpleMath::Vector3& center,
+  float radius,
+  const DirectX::SimpleMath::Ray& r)
+{
+  using DirectX::SimpleMath::Vector3;
+  Vector3 oc = r.position - center;
+
+  float a            = r.direction.Dot(r.direction);
+  float b            = 2.0f * r.direction.Dot(oc);
+  float c            = oc.Dot(oc) - radius * radius;
+  float discriminant = b * b - 4.0f * a * c;
+  return (discriminant > 0.0f);
+}
+
+//------------------------------------------------------------------------------
 DirectX::SimpleMath::Color
 RayTracer::color(const DirectX::SimpleMath::Ray& r) const
 {
   using DirectX::SimpleMath::Color;
   using DirectX::SimpleMath::Vector3;
+
+  // Sphere
+  if (hit_sphere(Vector3(0.0f, 0.0f, -1.0f), 0.5f, r))
+  {
+    return Color(1.0f, 0.0f, 0.0f);
+  }
+
+  // Background
   Vector3 unit_direction = r.direction;
   unit_direction.Normalize();
-
   float t = 0.5f * (unit_direction.y + 1.0f);    // [-1, 1] => [0, 1]
   return ((1.0f - t) * Color(1.0f, 1.0f, 1.0f)) + (t * Color(0.5f, 0.7f, 1.0f));
 }
