@@ -52,18 +52,26 @@ Game::Initialize(HWND window, int width, int height)
   // TODO: Load fonts if you don't want to use the default font.
 
   // Start Rendering
-  auto render = [&]()
-  {
+  auto render = [&]() {
+    auto start = std::chrono::high_resolution_clock::now();
+
     ray::RayTracer rt;
-    auto image = rt.generateImage();
+    auto image       = rt.generateImage();
+    m_renderDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::high_resolution_clock::now() - start);
+
+    start = std::chrono::high_resolution_clock::now();
     if (!rt.saveImage(image, "out.ppm"))
     {
       m_isError = true;
     }
+    m_saveDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::high_resolution_clock::now() - start);
     m_isDone = true;
+
   };
 
-  m_isDone = false;
+  m_isDone       = false;
   m_renderThread = std::thread(render);
 }
 
@@ -143,6 +151,8 @@ Game::Render()
     {
       ImGui::Text("Done!");
     }
+    ImGui::Text("Render duration: %ld ms", m_renderDuration.load());
+    ImGui::Text("File Save duration: %ld ms", m_saveDuration.load());
   }
   else
   {
