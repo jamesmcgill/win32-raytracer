@@ -265,3 +265,4 @@ __pycache__/
 
 # Raytracer specific
 *.ppm
+*.bmp

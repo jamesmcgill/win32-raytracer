@@ -6,11 +6,19 @@
 #include "Game.h"
 #include "RayTracer.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#pragma warning(push)
+#pragma warning(disable : 4100)
+#include "stb_image.h"
+#pragma warning(pop)
+
 extern void ExitGame();
 
 using namespace DirectX;
 
 using Microsoft::WRL::ComPtr;
+
+static const wchar_t* IMAGE_FILENAME = L"out.bmp";
 
 //------------------------------------------------------------------------------
 Game::Game() noexcept(false)
@@ -61,14 +69,13 @@ Game::Initialize(HWND window, int width, int height)
       std::chrono::high_resolution_clock::now() - start);
 
     start = std::chrono::high_resolution_clock::now();
-    if (!rt.saveImage(image, "out.ppm"))
+    if (!rt.saveImage(image, IMAGE_FILENAME))
     {
       m_isError = true;
     }
     m_saveDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::high_resolution_clock::now() - start);
     m_isDone = true;
-
   };
 
   m_isDone       = false;
@@ -118,6 +125,30 @@ Game::Update(DX::StepTimer const& timer)
 #pragma endregion
 
 #pragma region Frame Render
+
+//------------------------------------------------------------------------------
+bool
+Game::CreateTexture()
+{
+  ComPtr<ID3D11Resource> resource;
+  DX::ThrowIfFailed(CreateWICTextureFromFile(
+    m_deviceResources->GetD3DDevice(),
+    IMAGE_FILENAME,
+    resource.GetAddressOf(),
+    m_texture.ReleaseAndGetAddressOf()));
+
+  ComPtr<ID3D11Texture2D> cat;
+  DX::ThrowIfFailed(resource.As(&cat));
+
+  CD3D11_TEXTURE2D_DESC catDesc;
+  cat->GetDesc(&catDesc);
+
+  m_origin.x = float(catDesc.Width / 2);
+  m_origin.y = float(catDesc.Height / 2);
+
+  return true;
+}
+
 //------------------------------------------------------------------------------
 // Draws the scene.
 //------------------------------------------------------------------------------
@@ -150,6 +181,17 @@ Game::Render()
     else
     {
       ImGui::Text("Done!");
+      if (!m_isTextureCreated)
+      {
+        m_isTextureCreated = true;
+        CreateTexture();
+      }
+      m_spriteBatch->Begin();
+
+      m_spriteBatch->Draw(
+        m_texture.Get(), m_screenPos, nullptr, Colors::White, 0.f, m_origin);
+
+      m_spriteBatch->End();
     }
     ImGui::Text("Render duration: %ld ms", m_renderDuration.load());
     ImGui::Text("File Save duration: %ld ms", m_saveDuration.load());
@@ -274,6 +316,9 @@ void
 Game::CreateDeviceDependentResources()
 {
   ImGui_ImplDX11_CreateDeviceObjects();
+
+  m_spriteBatch
+    = std::make_unique<SpriteBatch>(m_deviceResources->GetD3DDeviceContext());
 }
 
 //------------------------------------------------------------------------------
@@ -282,13 +327,20 @@ Game::CreateDeviceDependentResources()
 void
 Game::CreateWindowSizeDependentResources()
 {
-  // TODO: Initialize windows-size dependent objects here.
+  RECT outputSize = m_deviceResources->GetOutputSize();
+  float width     = static_cast<float>(outputSize.right - outputSize.left);
+  float height    = static_cast<float>(outputSize.bottom - outputSize.top);
+
+  m_screenPos.x = width / 2.f;
+  m_screenPos.y = height / 2.f;
 }
 
 //------------------------------------------------------------------------------
 void
 Game::OnDeviceLost()
 {
+  m_spriteBatch.reset();
+  m_texture.Reset();
   ImGui_ImplDX11_InvalidateDeviceObjects();
 }
 

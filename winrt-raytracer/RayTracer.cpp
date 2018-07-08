@@ -1,6 +1,12 @@
 #include "pch.h"
 #include "RayTracer.h"
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#include "stb_image_write.h"
+#pragma warning(pop)
+
 using namespace ray;
 
 //------------------------------------------------------------------------------
@@ -49,20 +55,22 @@ RayTracer::generateImage() const
 
 //------------------------------------------------------------------------------
 bool
-RayTracer::saveImage(const Image& image, const std::string& fileName) const
+RayTracer::saveImage(const Image& image, const std::wstring& fileName) const
 {
-  std::ofstream fileOut(fileName);
-  if (!fileOut.is_open())
-  {
-    return false;
-  }
+  CHAR strFile[MAX_PATH];
+  WideCharToMultiByte(
+    CP_ACP,
+    WC_NO_BEST_FIT_CHARS,
+    fileName.c_str(),
+    -1,
+    strFile,
+    MAX_PATH,
+    nullptr,
+    FALSE);
 
-  fileOut << "P3\n" << image.width << " " << image.height << "\n255\n";
-  for (auto& px : image.buffer)
-  {
-    fileOut << (int)px[0] << " " << (int)px[1] << " " << (int)px[2] << "\n";
-  }
-  return true;
+  return (
+    stbi_write_bmp(strFile, image.width, image.height, 3, image.buffer.data())
+    != 0);
 }
 
 //------------------------------------------------------------------------------

@@ -187,6 +187,8 @@
     <ClInclude Include="imgui-1.62\stb_truetype.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="RayTracer.h" />
+    <ClInclude Include="stb_image.h" />
+    <ClInclude Include="stb_image_write.h" />
     <ClInclude Include="StepTimer.h" />
   </ItemGroup>
   <ItemGroup>

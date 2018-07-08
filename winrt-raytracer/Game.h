@@ -41,6 +41,8 @@ public:
   void GetDefaultSize(int& width, int& height) const;
 
 private:
+  bool CreateTexture();
+
   void Update(DX::StepTimer const& timer);
   void Render();
 
@@ -62,4 +64,11 @@ private:
   std::atomic<std::chrono::milliseconds> m_renderDuration;
   std::atomic<std::chrono::milliseconds> m_saveDuration;
   std::thread m_renderThread;
+
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_texture;
+  bool m_isTextureCreated = false;
+
+  std::unique_ptr<DirectX::SpriteBatch> m_spriteBatch;
+  DirectX::SimpleMath::Vector2 m_screenPos;
+  DirectX::SimpleMath::Vector2 m_origin;
 };
