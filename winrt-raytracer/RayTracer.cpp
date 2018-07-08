@@ -8,7 +8,7 @@ RayTracer::RayTracer() {}
 
 //------------------------------------------------------------------------------
 Image
-RayTracer::generateImage()
+RayTracer::generateImage() const
 {
   const size_t nX = 800;
   const size_t nY = 500;
@@ -18,18 +18,30 @@ RayTracer::generateImage()
   image.height = nY;
   image.buffer.resize(nX * nY);
 
+  using DirectX::SimpleMath::Vector3;
+  const float HALF_X = 4.0f;
+  const float HALF_Y = 2.5f;
+  Vector3 lower_left_corner(-HALF_X, -HALF_Y, -1.0f);
+  Vector3 horizontal(2 * HALF_X, 0.0f, 0.0f);
+  Vector3 vertical(0.0f, 2 * HALF_Y, 0.0f);
+  Vector3 origin(0.0f, 0.0f, 0.0f);
+
   for (int j = 0; j < nY; ++j)
   {
     for (int i = 0; i < nX; ++i)
     {
-      float r = float(i) / float(nX);
-      float g = float(nY - j) / float(nY);
-      float b = 0.2f;
+      const float u = float(i) / float(nX);
+      const float v = float(nY - j) / float(nY);
 
+      using DirectX::SimpleMath::Ray;
+      Ray r(origin, lower_left_corner + u * horizontal + v * vertical);
+
+      using DirectX::SimpleMath::Color;
+      Color col  = color(r);
       auto& dest = image.buffer[j * nX + i];
-      dest[0]    = u8(255.99 * r);
-      dest[1]    = u8(255.99 * g);
-      dest[2]    = u8(255.99 * b);
+      dest[0]    = u8(255.99 * col.R());
+      dest[1]    = u8(255.99 * col.G());
+      dest[2]    = u8(255.99 * col.B());
     }
   }
   return image;
@@ -37,7 +49,7 @@ RayTracer::generateImage()
 
 //------------------------------------------------------------------------------
 bool
-RayTracer::saveImage(const Image& image, const std::string& fileName)
+RayTracer::saveImage(const Image& image, const std::string& fileName) const
 {
   std::ofstream fileOut(fileName);
   if (!fileOut.is_open())
@@ -52,4 +64,18 @@ RayTracer::saveImage(const Image& image, const std::string& fileName)
   }
   return true;
 }
+
+//------------------------------------------------------------------------------
+DirectX::SimpleMath::Color
+RayTracer::color(const DirectX::SimpleMath::Ray& r) const
+{
+  using DirectX::SimpleMath::Color;
+  using DirectX::SimpleMath::Vector3;
+  Vector3 unit_direction = r.direction;
+  unit_direction.Normalize();
+
+  float t = 0.5f * (unit_direction.y + 1.0f);    // [-1, 1] => [0, 1]
+  return ((1.0f - t) * Color(1.0f, 1.0f, 1.0f)) + (t * Color(0.5f, 0.7f, 1.0f));
+}
+
 //------------------------------------------------------------------------------
