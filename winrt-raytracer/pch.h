@@ -159,5 +159,8 @@ struct Image
   int height = 0;
   ImageBuffer buffer;
 };
+
+const size_t IMAGE_WIDTH  = 800;
+const size_t IMAGE_HEIGHT = 500;
 };
 //------------------------------------------------------------------------------

@@ -16,8 +16,8 @@ RayTracer::RayTracer() {}
 Image
 RayTracer::generateImage() const
 {
-  const size_t nX = 800;
-  const size_t nY = 500;
+  const size_t nX = ray::IMAGE_WIDTH;
+  const size_t nY = ray::IMAGE_HEIGHT;
 
   Image image;
   image.width  = nX;
