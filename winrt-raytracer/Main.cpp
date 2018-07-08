@@ -121,6 +121,7 @@ wWinMain(
     }
   }
 
+  g_game->ShutDown();
   g_game.reset();
 
   CoUninitialize();

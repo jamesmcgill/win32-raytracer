@@ -45,6 +45,7 @@
     <ClInclude Include="imgui-1.62\imgui_impl_win32.h">
       <Filter>imgui-1.62</Filter>
     </ClInclude>
+    <ClInclude Include="RayTracer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
@@ -65,6 +66,7 @@
     <ClCompile Include="imgui-1.62\imgui_impl_win32.cpp">
       <Filter>imgui-1.62</Filter>
     </ClCompile>
+    <ClCompile Include="RayTracer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resource.rc" />

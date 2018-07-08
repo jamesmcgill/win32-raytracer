@@ -56,4 +56,8 @@ private:
   DX::StepTimer m_timer;
 
   HWND m_hwnd = nullptr;
+
+  std::atomic<bool> m_isError = false;
+  std::atomic<bool> m_isDone = false;
+  std::thread m_renderThread;
 };

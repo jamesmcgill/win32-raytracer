@@ -72,6 +72,14 @@
 #include <exception>
 #include <memory>
 #include <stdexcept>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <array>
+#include <fstream>
+#include <thread>
+#include <mutex>
+#include <atomic>
 
 #include <stdio.h>
 
@@ -136,3 +144,19 @@ ThrowIfFailed(HRESULT hr)
   }
 }
 }
+
+//------------------------------------------------------------------------------
+using u8 = uint8_t;
+
+namespace ray
+{
+using Pixel       = std::array<u8, 3>;
+using ImageBuffer = std::vector<Pixel>;
+struct Image
+{
+  int width  = 0;
+  int height = 0;
+  ImageBuffer buffer;
+};
+};
+//------------------------------------------------------------------------------

@@ -4,6 +4,7 @@
 
 #include "pch.h"
 #include "Game.h"
+#include "RayTracer.h"
 
 extern void ExitGame();
 
@@ -49,12 +50,32 @@ Game::Initialize(HWND window, int width, int height)
 
   // TODO: Fill optional settings of the io structure later.
   // TODO: Load fonts if you don't want to use the default font.
+
+  // Start Rendering
+  auto render = [&]()
+  {
+    ray::RayTracer rt;
+    auto image = rt.generateImage();
+    if (!rt.saveImage(image, "out.ppm"))
+    {
+      m_isError = true;
+    }
+    m_isDone = true;
+  };
+
+  m_isDone = false;
+  m_renderThread = std::thread(render);
 }
 
 //------------------------------------------------------------------------------
 void
 Game::ShutDown()
 {
+  if (m_renderThread.joinable())
+  {
+    m_renderThread.join();
+  }
+
   ImGui_ImplDX11_Shutdown();
   ImGui_ImplWin32_Shutdown();
   ImGui::DestroyContext();
@@ -111,7 +132,22 @@ Game::Render()
   ImGui_ImplDX11_NewFrame();
   ImGui_ImplWin32_NewFrame();
   ImGui::NewFrame();
-  ImGui::Text("Hello, world!");
+
+  if (m_isDone)
+  {
+    if (m_isError)
+    {
+      ImGui::Text("Error saving file!");
+    }
+    else
+    {
+      ImGui::Text("Done!");
+    }
+  }
+  else
+  {
+    ImGui::Text("Reticulating splines...");
+  }
 
   // auto context = m_deviceResources->GetD3DDeviceContext();
 
