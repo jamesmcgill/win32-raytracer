@@ -81,7 +81,7 @@
 #include <mutex>
 #include <atomic>
 #include <chrono>
-
+#include <optional>
 #include <stdio.h>
 
 #ifdef _DEBUG

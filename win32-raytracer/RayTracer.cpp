@@ -10,6 +10,22 @@
 using namespace ray;
 
 //------------------------------------------------------------------------------
+struct Sphere
+{
+  DirectX::SimpleMath::Vector3 center;
+  float radius = 1.0f;
+};
+
+//------------------------------------------------------------------------------
+// [-1, 1] => [0, 1]
+//------------------------------------------------------------------------------
+float
+quantize(float x)
+{
+  return 0.5f * (x + 1.0f);
+}
+
+//------------------------------------------------------------------------------
 RayTracer::RayTracer() {}
 
 //------------------------------------------------------------------------------
@@ -74,20 +90,26 @@ RayTracer::saveImage(const Image& image, const std::wstring& fileName) const
 }
 
 //------------------------------------------------------------------------------
-bool
+std::optional<float>
 hit_sphere(
   const DirectX::SimpleMath::Vector3& center,
   float radius,
   const DirectX::SimpleMath::Ray& r)
 {
   using DirectX::SimpleMath::Vector3;
-  Vector3 oc = r.position - center;
+  Vector3 rayStart = r.position - center;
 
   float a            = r.direction.Dot(r.direction);
-  float b            = 2.0f * r.direction.Dot(oc);
-  float c            = oc.Dot(oc) - radius * radius;
+  float b            = 2.0f * r.direction.Dot(rayStart);
+  float c            = rayStart.Dot(rayStart) - radius * radius;
   float discriminant = b * b - 4.0f * a * c;
-  return (discriminant > 0.0f);
+
+  if (discriminant < 0.0f)
+  {
+    return {};
+  }
+
+  return (-b - sqrtf(discriminant)) / (2.0f * a);
 }
 
 //------------------------------------------------------------------------------
@@ -98,15 +120,20 @@ RayTracer::color(const DirectX::SimpleMath::Ray& r) const
   using DirectX::SimpleMath::Vector3;
 
   // Sphere
-  if (hit_sphere(Vector3(0.0f, 0.0f, -1.0f), 0.5f, r))
+  Sphere sphere = {{0.0f, 0.0f, -1.0f}, 0.5f};
+  if (auto t = hit_sphere(sphere.center, sphere.radius, r))
   {
-    return Color(1.0f, 0.0f, 0.0f);
+    Vector3 hitPoint = r.position + (*t * r.direction);
+    Vector3 normal   = hitPoint - sphere.center;
+    normal.Normalize();
+
+    return Color(quantize(normal.x), quantize(normal.y), quantize(normal.z));
   }
 
   // Background
   Vector3 unit_direction = r.direction;
   unit_direction.Normalize();
-  float t = 0.5f * (unit_direction.y + 1.0f);    // [-1, 1] => [0, 1]
+  float t = quantize(unit_direction.y);
   return ((1.0f - t) * Color(1.0f, 1.0f, 1.0f)) + (t * Color(0.5f, 0.7f, 1.0f));
 }
 
