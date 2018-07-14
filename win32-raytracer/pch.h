@@ -7,12 +7,13 @@
 
 // Off by default warnings - Taken from DirectXTK pch.h
 #pragma warning( \
-  disable : 4619 4616 4061 4265 4365 4571 4623 4625 4626 4628 4668 4710 4711 4746 4774 4820 4987 5026 5027 5031 5032 5039 5045)
+  disable : 4619 4616 4061 4265 4365 4571 4582 4623 4625 4626 4628 4668 4710 4711 4746 4774 4820 4987 5026 5027 5031 5032 5039 5045)
 // C4619/4616 #pragma warning warnings
 // C4061 enumerator 'X' in switch of enum 'X' is not explicitly handled by a
 // case label C4265 class has virtual functions, but destructor is not virtual
 // C4365 signed/unsigned mismatch
 // C4571 behavior change
+// C4571 constructor is not implicitly called(issue with optional with POD type)
 // C4623 default constructor was implicitly defined as deleted
 // C4625 copy constructor was implicitly defined as deleted
 // C4626 assignment operator was implicitly defined as deleted
@@ -82,6 +83,7 @@
 #include <atomic>
 #include <chrono>
 #include <optional>
+#include <limits>
 #include <stdio.h>
 
 #ifdef _DEBUG
@@ -161,6 +163,6 @@ struct Image
 };
 
 const size_t IMAGE_WIDTH  = 800;
-const size_t IMAGE_HEIGHT = 500;
+const size_t IMAGE_HEIGHT = 400;
 };
 //------------------------------------------------------------------------------

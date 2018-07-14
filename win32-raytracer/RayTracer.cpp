@@ -8,12 +8,70 @@
 #pragma warning(pop)
 
 using namespace ray;
+//------------------------------------------------------------------------------
+struct HitRecord
+{
+  DirectX::SimpleMath::Vector3 hitPoint;
+  DirectX::SimpleMath::Vector3 normal;
+  float t;
+};
 
 //------------------------------------------------------------------------------
-struct Sphere
+struct IHitable
 {
+  virtual std::optional<HitRecord>
+  hit(const DirectX::SimpleMath::Ray& ray, float tMin, float tMax) = 0;
+
+  virtual ~IHitable() = default;
+};
+
+//------------------------------------------------------------------------------
+struct Sphere : public IHitable
+{
+  Sphere() = default;
+  Sphere(DirectX::SimpleMath::Vector3 _center, float _radius)
+      : center(_center)
+      , radius(_radius)
+  {
+  }
+
   DirectX::SimpleMath::Vector3 center;
   float radius = 1.0f;
+
+  std::optional<HitRecord>
+  hit(const DirectX::SimpleMath::Ray& ray, float tMin, float tMax)
+  {
+    using DirectX::SimpleMath::Vector3;
+    Vector3 rayStart = ray.position - center;
+
+    float a            = ray.direction.Dot(ray.direction);
+    float b            = 2.0f * ray.direction.Dot(rayStart);
+    float c            = rayStart.Dot(rayStart) - radius * radius;
+    float discriminant = b * b - 4.0f * a * c;
+
+    if (discriminant < 0.0f)
+    {
+      return std::nullopt;
+    }
+
+    float sqrtDiscrim = sqrt(discriminant);
+    float t           = (-b - sqrtDiscrim) / (2.0f * a);
+    if (t < tMin || t > tMax)
+    {
+      // Try the backface
+      t = (-b + sqrtDiscrim) / (2.0f * a);
+      if (t < tMin || t > tMax)
+      {
+        return std::nullopt;
+      }
+    }
+
+    HitRecord ret;
+    ret.t        = t;
+    ret.hitPoint = ray.position + (ret.t * ray.direction);
+    ret.normal   = (ret.hitPoint - center) / radius;
+    return ret;
+  }
 };
 
 //------------------------------------------------------------------------------
@@ -23,6 +81,45 @@ float
 quantize(float x)
 {
   return 0.5f * (x + 1.0f);
+}
+
+//------------------------------------------------------------------------------
+DirectX::SimpleMath::Color
+color(
+  const DirectX::SimpleMath::Ray& ray,
+  const std::vector<std::unique_ptr<IHitable>>& world)
+{
+  using DirectX::SimpleMath::Color;
+  using DirectX::SimpleMath::Vector3;
+
+  // World test - find nearest object hit
+  float nearestT = std::numeric_limits<float>::max();
+  std::optional<HitRecord> hitRecord;
+  for (const auto& entity : world)
+  {
+    if (auto optRecord = entity->hit(ray, 0.0f, nearestT))
+    {
+      nearestT  = optRecord->t;
+      hitRecord = optRecord;
+    }
+  }
+
+  // Paint Object Colour
+  if (hitRecord)
+  {
+    auto& rec = *hitRecord;
+    return Color(
+      quantize(rec.normal.x), quantize(rec.normal.y), quantize(rec.normal.z));
+  }
+  else
+  {
+    // Background
+    Vector3 unit_direction = ray.direction;
+    unit_direction.Normalize();
+    float t = quantize(unit_direction.y);
+    return ((1.0f - t) * Color(1.0f, 1.0f, 1.0f))
+           + (t * Color(0.5f, 0.7f, 1.0f));
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -48,6 +145,10 @@ RayTracer::generateImage() const
   Vector3 vertical(0.0f, 2 * HALF_Y, 0.0f);
   Vector3 origin(0.0f, 0.0f, 0.0f);
 
+  std::vector<std::unique_ptr<IHitable>> world;
+  world.push_back(std::make_unique<Sphere>(Vector3(0.0f, 0.0f, -1.0f), 0.5f));
+  world.push_back(std::make_unique<Sphere>(Vector3(0.0f, -100.5f, -1.0f), 100.f));
+
   for (int j = 0; j < nY; ++j)
   {
     for (int i = 0; i < nX; ++i)
@@ -56,10 +157,10 @@ RayTracer::generateImage() const
       const float v = float(nY - j) / float(nY);
 
       using DirectX::SimpleMath::Ray;
-      Ray r(origin, lower_left_corner + u * horizontal + v * vertical);
+      Ray ray(origin, lower_left_corner + u * horizontal + v * vertical);
 
       using DirectX::SimpleMath::Color;
-      Color col  = color(r);
+      Color col  = color(ray, world);
       auto& dest = image.buffer[j * nX + i];
       dest[0]    = u8(255.99 * col.R());
       dest[1]    = u8(255.99 * col.G());
@@ -87,54 +188,6 @@ RayTracer::saveImage(const Image& image, const std::wstring& fileName) const
   return (
     stbi_write_bmp(strFile, image.width, image.height, 3, image.buffer.data())
     != 0);
-}
-
-//------------------------------------------------------------------------------
-std::optional<float>
-hit_sphere(
-  const DirectX::SimpleMath::Vector3& center,
-  float radius,
-  const DirectX::SimpleMath::Ray& r)
-{
-  using DirectX::SimpleMath::Vector3;
-  Vector3 rayStart = r.position - center;
-
-  float a            = r.direction.Dot(r.direction);
-  float b            = 2.0f * r.direction.Dot(rayStart);
-  float c            = rayStart.Dot(rayStart) - radius * radius;
-  float discriminant = b * b - 4.0f * a * c;
-
-  if (discriminant < 0.0f)
-  {
-    return {};
-  }
-
-  return (-b - sqrtf(discriminant)) / (2.0f * a);
-}
-
-//------------------------------------------------------------------------------
-DirectX::SimpleMath::Color
-RayTracer::color(const DirectX::SimpleMath::Ray& r) const
-{
-  using DirectX::SimpleMath::Color;
-  using DirectX::SimpleMath::Vector3;
-
-  // Sphere
-  Sphere sphere = {{0.0f, 0.0f, -1.0f}, 0.5f};
-  if (auto t = hit_sphere(sphere.center, sphere.radius, r))
-  {
-    Vector3 hitPoint = r.position + (*t * r.direction);
-    Vector3 normal   = hitPoint - sphere.center;
-    normal.Normalize();
-
-    return Color(quantize(normal.x), quantize(normal.y), quantize(normal.z));
-  }
-
-  // Background
-  Vector3 unit_direction = r.direction;
-  unit_direction.Normalize();
-  float t = quantize(unit_direction.y);
-  return ((1.0f - t) * Color(1.0f, 1.0f, 1.0f)) + (t * Color(0.5f, 0.7f, 1.0f));
 }
 
 //------------------------------------------------------------------------------
