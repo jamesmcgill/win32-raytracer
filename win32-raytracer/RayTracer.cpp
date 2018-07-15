@@ -236,11 +236,17 @@ struct Sphere : public IHitable
 DirectX::SimpleMath::Color
 getColor(
   const DirectX::SimpleMath::Ray& ray,
-  const std::vector<std::unique_ptr<IHitable>>& world)
+  const std::vector<std::unique_ptr<IHitable>>& world,
+  int recurseDepth = 0)
 {
   using DirectX::SimpleMath::Color;
   using DirectX::SimpleMath::Ray;
   using DirectX::SimpleMath::Vector3;
+
+  if (recurseDepth > ray::MAX_RECURSION)
+  {
+    return Color();
+  }
 
   // World test - find nearest object hit
   float nearestT = std::numeric_limits<float>::max();
@@ -261,7 +267,8 @@ getColor(
     assert(rec.pMaterial);
     if (auto scatter = rec.pMaterial->scatter(ray, rec))
     {
-      return scatter->attenuation * getColor(scatter->ray, world);
+      return scatter->attenuation
+             * getColor(scatter->ray, world, ++recurseDepth);
     }
   }
   else
