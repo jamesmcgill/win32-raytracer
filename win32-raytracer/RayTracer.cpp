@@ -8,6 +8,34 @@
 #pragma warning(pop)
 
 using namespace ray;
+
+//------------------------------------------------------------------------------
+struct Camera
+{
+  DirectX::SimpleMath::Vector3 lower_left_corner;
+  DirectX::SimpleMath::Vector3 horizontal;
+  DirectX::SimpleMath::Vector3 vertical;
+  DirectX::SimpleMath::Vector3 origin;
+
+  Camera()
+  {
+    const float HALF_X = ray::IMAGE_WIDTH / 200.f;
+    const float HALF_Y = ray::IMAGE_HEIGHT / 200.f;
+
+    using DirectX::SimpleMath::Vector3;
+    lower_left_corner = Vector3(-HALF_X, -HALF_Y, -1.0f);
+    horizontal        = Vector3(2 * HALF_X, 0.0f, 0.0f);
+    vertical          = Vector3(0.0f, 2 * HALF_Y, 0.0f);
+    origin            = Vector3(0.0f, 0.0f, 0.0f);
+  }
+
+  DirectX::SimpleMath::Ray getRay(float u, float v)
+  {
+    return DirectX::SimpleMath::Ray(
+      origin, lower_left_corner + u * horizontal + v * vertical);
+  }
+};
+
 //------------------------------------------------------------------------------
 struct HitRecord
 {
@@ -137,17 +165,13 @@ RayTracer::generateImage() const
   image.height = nY;
   image.buffer.resize(nX * nY);
 
-  using DirectX::SimpleMath::Vector3;
-  const float HALF_X = ray::IMAGE_WIDTH / 200.f;
-  const float HALF_Y = ray::IMAGE_HEIGHT / 200.f;
-  Vector3 lower_left_corner(-HALF_X, -HALF_Y, -1.0f);
-  Vector3 horizontal(2 * HALF_X, 0.0f, 0.0f);
-  Vector3 vertical(0.0f, 2 * HALF_Y, 0.0f);
-  Vector3 origin(0.0f, 0.0f, 0.0f);
+  Camera camera;
 
+  using DirectX::SimpleMath::Vector3;
   std::vector<std::unique_ptr<IHitable>> world;
   world.push_back(std::make_unique<Sphere>(Vector3(0.0f, 0.0f, -1.0f), 0.5f));
-  world.push_back(std::make_unique<Sphere>(Vector3(0.0f, -100.5f, -1.0f), 100.f));
+  world.push_back(
+    std::make_unique<Sphere>(Vector3(0.0f, -100.5f, -1.0f), 100.f));
 
   for (int j = 0; j < nY; ++j)
   {
@@ -156,11 +180,8 @@ RayTracer::generateImage() const
       const float u = float(i) / float(nX);
       const float v = float(nY - j) / float(nY);
 
-      using DirectX::SimpleMath::Ray;
-      Ray ray(origin, lower_left_corner + u * horizontal + v * vertical);
-
       using DirectX::SimpleMath::Color;
-      Color col  = color(ray, world);
+      Color col  = color(camera.getRay(u, v), world);
       auto& dest = image.buffer[j * nX + i];
       dest[0]    = u8(255.99 * col.R());
       dest[1]    = u8(255.99 * col.G());
