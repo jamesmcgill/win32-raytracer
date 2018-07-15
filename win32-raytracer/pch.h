@@ -165,5 +165,6 @@ struct Image
 
 const size_t IMAGE_WIDTH  = 800;
 const size_t IMAGE_HEIGHT = 600;
+const size_t NUM_SAMPLES  = 100;
 };
 //------------------------------------------------------------------------------

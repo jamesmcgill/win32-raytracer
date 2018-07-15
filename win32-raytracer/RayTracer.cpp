@@ -14,6 +14,30 @@ std::default_random_engine gen(randomDevice());
 std::uniform_real_distribution<float> randF(0.0f, 1.0f);
 
 //------------------------------------------------------------------------------
+// [-1, 1] => [0, 1]
+//------------------------------------------------------------------------------
+float
+quantize(float x)
+{
+  return 0.5f * (x + 1.0f);
+}
+
+//------------------------------------------------------------------------------
+DirectX::SimpleMath::Vector3
+getRandomPointInUnitSphere()
+{
+  using DirectX::SimpleMath::Vector3;
+  Vector3 point;
+  do
+  {
+    point = 2.0f * Vector3(randF(gen), randF(gen), randF(gen))
+            - Vector3(1.f, 1.f, 1.f);
+  } while (point.LengthSquared() >= 1.0f);
+
+  return point;
+}
+
+//------------------------------------------------------------------------------
 struct Camera
 {
   DirectX::SimpleMath::Vector3 lower_left_corner;
@@ -33,7 +57,7 @@ struct Camera
     origin            = Vector3(0.0f, 0.0f, 0.0f);
   }
 
-  DirectX::SimpleMath::Ray getRay(float u, float v)
+  DirectX::SimpleMath::Ray getRay(float u, float v) const
   {
     return DirectX::SimpleMath::Ray(
       origin, lower_left_corner + u * horizontal + v * vertical);
@@ -41,18 +65,65 @@ struct Camera
 };
 
 //------------------------------------------------------------------------------
+struct ScatterRecord
+{
+  DirectX::SimpleMath::Color attenuation;
+  DirectX::SimpleMath::Ray ray;
+};
+
+//------------------------------------------------------------------------------
+struct IMaterial;
 struct HitRecord
 {
   DirectX::SimpleMath::Vector3 hitPoint;
   DirectX::SimpleMath::Vector3 normal;
   float t;
+  IMaterial* pMaterial;
+};
+
+//------------------------------------------------------------------------------
+struct IMaterial
+{
+  virtual std::optional<ScatterRecord>
+  scatter(const DirectX::SimpleMath::Ray& ray, const HitRecord& rec) const = 0;
+
+  virtual ~IMaterial() = default;
+};
+
+//------------------------------------------------------------------------------
+struct LambertianMaterial : public IMaterial
+{
+  const DirectX::SimpleMath::Color albedo;
+
+  LambertianMaterial(DirectX::SimpleMath::Color _albedo)
+      : albedo(_albedo)
+  {
+  }
+
+  std::optional<ScatterRecord> scatter(
+    const DirectX::SimpleMath::Ray& ray, const HitRecord& rec) const override
+  {
+    UNREFERENCED_PARAMETER(ray);
+
+    using DirectX::SimpleMath::Ray;
+    using DirectX::SimpleMath::Vector3;
+
+    Vector3 reflectTo
+      = rec.hitPoint + rec.normal + getRandomPointInUnitSphere();
+    Vector3 reflectDir = reflectTo - rec.hitPoint;
+
+    ScatterRecord scatter;
+    scatter.attenuation = albedo;
+    scatter.ray         = Ray(rec.hitPoint, reflectDir);
+    return scatter;
+  }
 };
 
 //------------------------------------------------------------------------------
 struct IHitable
 {
   virtual std::optional<HitRecord>
-  hit(const DirectX::SimpleMath::Ray& ray, float tMin, float tMax) = 0;
+  hit(const DirectX::SimpleMath::Ray& ray, float tMin, float tMax) const = 0;
 
   virtual ~IHitable() = default;
 };
@@ -61,17 +132,22 @@ struct IHitable
 struct Sphere : public IHitable
 {
   Sphere() = default;
-  Sphere(DirectX::SimpleMath::Vector3 _center, float _radius)
+  Sphere(
+    DirectX::SimpleMath::Vector3 _center,
+    float _radius,
+    std::unique_ptr<IMaterial> _pMaterial)
       : center(_center)
       , radius(_radius)
+      , pMaterial(std::move(_pMaterial))
   {
   }
 
   DirectX::SimpleMath::Vector3 center;
   float radius = 1.0f;
+  std::unique_ptr<IMaterial> pMaterial;
 
-  std::optional<HitRecord>
-  hit(const DirectX::SimpleMath::Ray& ray, float tMin, float tMax)
+  std::optional<HitRecord> hit(
+    const DirectX::SimpleMath::Ray& ray, float tMin, float tMax) const override
   {
     using DirectX::SimpleMath::Vector3;
     Vector3 rayStart = ray.position - center;
@@ -99,36 +175,13 @@ struct Sphere : public IHitable
     }
 
     HitRecord ret;
-    ret.t        = t;
-    ret.hitPoint = ray.position + (ret.t * ray.direction);
-    ret.normal   = (ret.hitPoint - center) / radius;
+    ret.t         = t;
+    ret.hitPoint  = ray.position + (ret.t * ray.direction);
+    ret.normal    = (ret.hitPoint - center) / radius;
+    ret.pMaterial = pMaterial.get();
     return ret;
   }
 };
-
-//------------------------------------------------------------------------------
-// [-1, 1] => [0, 1]
-//------------------------------------------------------------------------------
-float
-quantize(float x)
-{
-  return 0.5f * (x + 1.0f);
-}
-
-//------------------------------------------------------------------------------
-DirectX::SimpleMath::Vector3
-getRandomPointInUnitSphere()
-{
-  using DirectX::SimpleMath::Vector3;
-  Vector3 point;
-  do
-  {
-    point = 2.0f * Vector3(randF(gen), randF(gen), randF(gen))
-            - Vector3(1.f, 1.f, 1.f);
-  } while (point.LengthSquared() >= 1.0f);
-
-  return point;
-}
 
 //------------------------------------------------------------------------------
 DirectX::SimpleMath::Color
@@ -155,11 +208,12 @@ getColor(
   // Paint Object Colour
   if (hitRecord)
   {
-    auto& rec = *hitRecord;
-    Vector3 reflectTo
-      = rec.hitPoint + rec.normal + getRandomPointInUnitSphere();
-    Vector3 reflectDir = reflectTo - rec.hitPoint;
-    return 0.5f * getColor(Ray(rec.hitPoint, reflectDir), world);
+    const auto& rec = *hitRecord;
+    assert(rec.pMaterial);
+    if (auto scatter = rec.pMaterial->scatter(ray, rec))
+    {
+      return scatter->attenuation * getColor(scatter->ray, world);
+    }
   }
   else
   {
@@ -170,6 +224,8 @@ getColor(
     return ((1.0f - t) * Color(1.0f, 1.0f, 1.0f))
            + (t * Color(0.5f, 0.7f, 1.0f));
   }
+
+  return Color();
 }
 
 //------------------------------------------------------------------------------
@@ -181,10 +237,9 @@ RayTracer::generateImage() const
 {
   const size_t nX         = ray::IMAGE_WIDTH;
   const size_t nY         = ray::IMAGE_HEIGHT;
-  const size_t numSamples = 100;
 
   using DirectX::SimpleMath::Color;
-  const Color SAMPLE_COUNT(numSamples, numSamples, numSamples);
+  const Color SAMPLE_COUNT(NUM_SAMPLES, NUM_SAMPLES, NUM_SAMPLES);
 
   Image image;
   image.width  = nX;
@@ -195,16 +250,21 @@ RayTracer::generateImage() const
 
   using DirectX::SimpleMath::Vector3;
   std::vector<std::unique_ptr<IHitable>> world;
-  world.push_back(std::make_unique<Sphere>(Vector3(0.0f, 0.0f, -1.0f), 0.5f));
-  world.push_back(
-    std::make_unique<Sphere>(Vector3(0.0f, -100.5f, -1.0f), 100.f));
+  world.push_back(std::make_unique<Sphere>(
+    Vector3(0.0f, 0.0f, -1.0f),
+    0.5f,
+    std::make_unique<LambertianMaterial>(Color(0.8f, 0.3f, 0.3f))));
+  world.push_back(std::make_unique<Sphere>(
+    Vector3(0.0f, -100.5f, -1.0f),
+    100.f,
+    std::make_unique<LambertianMaterial>(Color(0.8f, 0.3f, 0.3f))));
 
   for (int j = 0; j < nY; ++j)
   {
     for (int i = 0; i < nX; ++i)
     {
       Color color;
-      for (int s = 0; s < numSamples; ++s)
+      for (int s = 0; s < NUM_SAMPLES; ++s)
       {
         const float u = float(i + randF(gen)) / float(nX);
         const float v = float(nY - j + randF(gen)) / float(nY);
