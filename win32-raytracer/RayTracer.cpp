@@ -113,7 +113,7 @@ quantize(float x)
 
 //------------------------------------------------------------------------------
 DirectX::SimpleMath::Color
-color(
+getColor(
   const DirectX::SimpleMath::Ray& ray,
   const std::vector<std::unique_ptr<IHitable>>& world)
 {
@@ -157,8 +157,15 @@ RayTracer::RayTracer() {}
 Image
 RayTracer::generateImage() const
 {
-  const size_t nX = ray::IMAGE_WIDTH;
-  const size_t nY = ray::IMAGE_HEIGHT;
+  const size_t nX         = ray::IMAGE_WIDTH;
+  const size_t nY         = ray::IMAGE_HEIGHT;
+  const size_t numSamples = 100;
+
+  using DirectX::SimpleMath::Color;
+  const Color SAMPLE_COUNT(numSamples, numSamples, numSamples);
+  std::random_device randomDevice;
+  std::default_random_engine gen(randomDevice());
+  std::uniform_real_distribution<float> randF(0.0f, 1.0f);
 
   Image image;
   image.width  = nX;
@@ -177,15 +184,19 @@ RayTracer::generateImage() const
   {
     for (int i = 0; i < nX; ++i)
     {
-      const float u = float(i) / float(nX);
-      const float v = float(nY - j) / float(nY);
+      Color color;
+      for (int s = 0; s < numSamples; ++s)
+      {
+        const float u = float(i + randF(gen)) / float(nX);
+        const float v = float(nY - j + randF(gen)) / float(nY);
+        color += getColor(camera.getRay(u, v), world);
+      }
+      color /= SAMPLE_COUNT;
 
-      using DirectX::SimpleMath::Color;
-      Color col  = color(camera.getRay(u, v), world);
       auto& dest = image.buffer[j * nX + i];
-      dest[0]    = u8(255.99 * col.R());
-      dest[1]    = u8(255.99 * col.G());
-      dest[2]    = u8(255.99 * col.B());
+      dest[0]    = u8(255.99 * color.R());
+      dest[1]    = u8(255.99 * color.G());
+      dest[2]    = u8(255.99 * color.B());
     }
   }
   return image;

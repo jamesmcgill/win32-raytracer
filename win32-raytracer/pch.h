@@ -85,6 +85,7 @@
 #include <optional>
 #include <limits>
 #include <stdio.h>
+#include <random>
 
 #ifdef _DEBUG
 #include <dxgidebug.h>
