@@ -58,7 +58,7 @@ wWinMain(
     wcex.hCursor       = LoadCursor(nullptr, IDC_ARROW);
     wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     wcex.lpszMenuName  = nullptr;
-    wcex.lpszClassName = L"winrt_raytracerWindowClass";
+    wcex.lpszClassName = L"win32_raytracerWindowClass";
     wcex.hIconSm       = LoadIcon(wcex.hInstance, L"IDI_ICON");
     if (!RegisterClassEx(&wcex))
       return 1;
@@ -77,8 +77,8 @@ wWinMain(
 
     HWND hwnd = CreateWindowEx(
       0,
-      L"winrt_raytracerWindowClass",
-      L"winrt-raytracer",
+      L"win32_raytracerWindowClass",
+      L"Raytracer",
       WS_OVERLAPPEDWINDOW,
       CW_USEDEFAULT,
       CW_USEDEFAULT,
@@ -89,7 +89,7 @@ wWinMain(
       hInstance,
       nullptr);
     // TODO: Change to CreateWindowEx(WS_EX_TOPMOST,
-    // L"winrt_raytracerWindowClass", L"winrt-raytracer", WS_POPUP, to default
+    // L"win32_raytracerWindowClass", L"win32-raytracer", WS_POPUP, to default
     // to fullscreen.
 
     if (!hwnd)
