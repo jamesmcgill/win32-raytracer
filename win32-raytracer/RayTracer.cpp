@@ -9,6 +9,10 @@
 
 using namespace ray;
 
+std::random_device randomDevice;
+std::default_random_engine gen(randomDevice());
+std::uniform_real_distribution<float> randF(0.0f, 1.0f);
+
 //------------------------------------------------------------------------------
 struct Camera
 {
@@ -112,12 +116,28 @@ quantize(float x)
 }
 
 //------------------------------------------------------------------------------
+DirectX::SimpleMath::Vector3
+getRandomPointInUnitSphere()
+{
+  using DirectX::SimpleMath::Vector3;
+  Vector3 point;
+  do
+  {
+    point = 2.0f * Vector3(randF(gen), randF(gen), randF(gen))
+            - Vector3(1.f, 1.f, 1.f);
+  } while (point.LengthSquared() >= 1.0f);
+
+  return point;
+}
+
+//------------------------------------------------------------------------------
 DirectX::SimpleMath::Color
 getColor(
   const DirectX::SimpleMath::Ray& ray,
   const std::vector<std::unique_ptr<IHitable>>& world)
 {
   using DirectX::SimpleMath::Color;
+  using DirectX::SimpleMath::Ray;
   using DirectX::SimpleMath::Vector3;
 
   // World test - find nearest object hit
@@ -125,7 +145,7 @@ getColor(
   std::optional<HitRecord> hitRecord;
   for (const auto& entity : world)
   {
-    if (auto optRecord = entity->hit(ray, 0.0f, nearestT))
+    if (auto optRecord = entity->hit(ray, 0.001f, nearestT))
     {
       nearestT  = optRecord->t;
       hitRecord = optRecord;
@@ -136,8 +156,10 @@ getColor(
   if (hitRecord)
   {
     auto& rec = *hitRecord;
-    return Color(
-      quantize(rec.normal.x), quantize(rec.normal.y), quantize(rec.normal.z));
+    Vector3 reflectTo
+      = rec.hitPoint + rec.normal + getRandomPointInUnitSphere();
+    Vector3 reflectDir = reflectTo - rec.hitPoint;
+    return 0.5f * getColor(Ray(rec.hitPoint, reflectDir), world);
   }
   else
   {
@@ -163,9 +185,6 @@ RayTracer::generateImage() const
 
   using DirectX::SimpleMath::Color;
   const Color SAMPLE_COUNT(numSamples, numSamples, numSamples);
-  std::random_device randomDevice;
-  std::default_random_engine gen(randomDevice());
-  std::uniform_real_distribution<float> randF(0.0f, 1.0f);
 
   Image image;
   image.width  = nX;
@@ -192,6 +211,9 @@ RayTracer::generateImage() const
         color += getColor(camera.getRay(u, v), world);
       }
       color /= SAMPLE_COUNT;
+
+      // Gamma Correction
+      color = Color(sqrt(color.R()), sqrt(color.G()), sqrt(color.B()));
 
       auto& dest = image.buffer[j * nX + i];
       dest[0]    = u8(255.99 * color.R());
