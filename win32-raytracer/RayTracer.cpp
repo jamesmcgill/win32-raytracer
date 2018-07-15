@@ -24,6 +24,15 @@ quantize(float x)
 
 //------------------------------------------------------------------------------
 DirectX::SimpleMath::Vector3
+reflect(
+  const DirectX::SimpleMath::Vector3& in,
+  const DirectX::SimpleMath::Vector3& normal)
+{
+  return in - (in.Dot(normal) * 2.0f) * normal;
+}
+
+//------------------------------------------------------------------------------
+DirectX::SimpleMath::Vector3
 getRandomPointInUnitSphere()
 {
   using DirectX::SimpleMath::Vector3;
@@ -111,6 +120,46 @@ struct LambertianMaterial : public IMaterial
     Vector3 reflectTo
       = rec.hitPoint + rec.normal + getRandomPointInUnitSphere();
     Vector3 reflectDir = reflectTo - rec.hitPoint;
+
+    ScatterRecord scatter;
+    scatter.attenuation = albedo;
+    scatter.ray         = Ray(rec.hitPoint, reflectDir);
+    return scatter;
+  }
+};
+
+//------------------------------------------------------------------------------
+struct MetalMaterial : public IMaterial
+{
+  const DirectX::SimpleMath::Color albedo;
+  float fuzz = 1.0f;
+
+  MetalMaterial(DirectX::SimpleMath::Color _albedo, float _fuzz = 1.0f)
+      : albedo(_albedo)
+  {
+    if (_fuzz < 1.0f)
+    {
+      fuzz = _fuzz;
+    }
+  }
+
+  std::optional<ScatterRecord> scatter(
+    const DirectX::SimpleMath::Ray& ray, const HitRecord& rec) const override
+  {
+    UNREFERENCED_PARAMETER(ray);
+
+    using DirectX::SimpleMath::Ray;
+    using DirectX::SimpleMath::Vector3;
+
+    Vector3 normalisedDir = ray.direction;
+    normalisedDir.Normalize();
+    Vector3 reflectTo = reflect(normalisedDir, rec.normal);
+    Vector3 reflectDir
+      = reflectTo - rec.hitPoint + fuzz * getRandomPointInUnitSphere();
+    if (reflectDir.Dot(rec.normal) <= 0.0f)
+    {
+      return std::nullopt;
+    }
 
     ScatterRecord scatter;
     scatter.attenuation = albedo;
@@ -235,8 +284,8 @@ RayTracer::RayTracer() {}
 Image
 RayTracer::generateImage() const
 {
-  const size_t nX         = ray::IMAGE_WIDTH;
-  const size_t nY         = ray::IMAGE_HEIGHT;
+  const size_t nX = ray::IMAGE_WIDTH;
+  const size_t nY = ray::IMAGE_HEIGHT;
 
   using DirectX::SimpleMath::Color;
   const Color SAMPLE_COUNT(NUM_SAMPLES, NUM_SAMPLES, NUM_SAMPLES);
@@ -257,7 +306,16 @@ RayTracer::generateImage() const
   world.push_back(std::make_unique<Sphere>(
     Vector3(0.0f, -100.5f, -1.0f),
     100.f,
-    std::make_unique<LambertianMaterial>(Color(0.8f, 0.3f, 0.3f))));
+    std::make_unique<LambertianMaterial>(Color(0.8f, 0.8f, 0.0f))));
+
+  world.push_back(std::make_unique<Sphere>(
+    Vector3(1.0f, 0.0f, -1.0f),
+    0.5f,
+    std::make_unique<MetalMaterial>(Color(0.8f, 0.6f, 0.2f), 1.0f)));
+  world.push_back(std::make_unique<Sphere>(
+    Vector3(-1.0f, 0.0f, -1.0f),
+    0.5f,
+    std::make_unique<MetalMaterial>(Color(0.8f, 0.8f, 0.8f), 0.3f)));
 
   for (int j = 0; j < nY; ++j)
   {
