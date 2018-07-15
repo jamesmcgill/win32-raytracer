@@ -163,6 +163,6 @@ struct Image
 };
 
 const size_t IMAGE_WIDTH  = 800;
-const size_t IMAGE_HEIGHT = 400;
+const size_t IMAGE_HEIGHT = 600;
 };
 //------------------------------------------------------------------------------

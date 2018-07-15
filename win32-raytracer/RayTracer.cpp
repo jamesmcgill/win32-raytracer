@@ -138,8 +138,8 @@ RayTracer::generateImage() const
   image.buffer.resize(nX * nY);
 
   using DirectX::SimpleMath::Vector3;
-  const float HALF_X = 4.0f;
-  const float HALF_Y = 2.5f;
+  const float HALF_X = ray::IMAGE_WIDTH / 200.f;
+  const float HALF_Y = ray::IMAGE_HEIGHT / 200.f;
   Vector3 lower_left_corner(-HALF_X, -HALF_Y, -1.0f);
   Vector3 horizontal(2 * HALF_X, 0.0f, 0.0f);
   Vector3 vertical(0.0f, 2 * HALF_Y, 0.0f);
