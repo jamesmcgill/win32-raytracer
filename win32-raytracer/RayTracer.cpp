@@ -32,6 +32,38 @@ reflect(
 }
 
 //------------------------------------------------------------------------------
+std::optional<DirectX::SimpleMath::Vector3>
+refract(
+  const DirectX::SimpleMath::Vector3& dir,
+  const DirectX::SimpleMath::Vector3& normal,
+  const float ni_over_nt)
+{
+  // TODO: Write your own
+  // return DirectX::SimpleMath::Vector3::Refract(in, normal, refractiveIndex);
+
+  DirectX::SimpleMath::Vector3 normalisedDir = dir;
+  normalisedDir.Normalize();
+
+  float dt           = normalisedDir.Dot(normal);
+  float discriminant = 1.0f - ni_over_nt * ni_over_nt * (1.0f - dt * dt);
+  if (discriminant > 0.0f)
+  {
+    return ni_over_nt * (normalisedDir - normal * dt)
+           - normal * sqrt(discriminant);
+  }
+  return std::nullopt;
+}
+
+//------------------------------------------------------------------------------
+float
+schlick(float cosine, float refractiveIndex)
+{
+  float r0 = (1.0f - refractiveIndex) / (1.0f + refractiveIndex);
+  r0       = r0 * r0;
+  return r0 + (1.0f - r0) * pow((1.0f - cosine), 5.0f);
+}
+
+//------------------------------------------------------------------------------
 DirectX::SimpleMath::Vector3
 getRandomPointInUnitSphere()
 {
@@ -146,8 +178,6 @@ struct MetalMaterial : public IMaterial
   std::optional<ScatterRecord> scatter(
     const DirectX::SimpleMath::Ray& ray, const HitRecord& rec) const override
   {
-    UNREFERENCED_PARAMETER(ray);
-
     using DirectX::SimpleMath::Ray;
     using DirectX::SimpleMath::Vector3;
 
@@ -164,6 +194,60 @@ struct MetalMaterial : public IMaterial
     ScatterRecord scatter;
     scatter.attenuation = albedo;
     scatter.ray         = Ray(rec.hitPoint, reflectDir);
+    return scatter;
+  }
+};
+
+//------------------------------------------------------------------------------
+struct DielectricMaterial : public IMaterial
+{
+  float refractiveIndex = 1.0f;
+
+  DielectricMaterial(float _refractiveIndex)
+      : refractiveIndex(_refractiveIndex)
+  {
+  }
+
+  std::optional<ScatterRecord> scatter(
+    const DirectX::SimpleMath::Ray& ray, const HitRecord& rec) const override
+  {
+    using DirectX::SimpleMath::Color;
+    using DirectX::SimpleMath::Ray;
+    using DirectX::SimpleMath::Vector3;
+
+    float rayDotNormal = ray.direction.Dot(rec.normal);
+    float rayLength    = ray.direction.Length();
+
+    Vector3 outwardNormal = rec.normal;
+    float ni_over_nt      = 1.0f / refractiveIndex;
+    float cosine          = -rayDotNormal / rayLength;
+
+    if (rayDotNormal > 0.0f)    // Exiting surface
+    {
+      outwardNormal = -rec.normal;
+      ni_over_nt    = refractiveIndex;
+      cosine        = refractiveIndex * rayDotNormal / rayLength;
+    }
+
+    bool isReflected = true;
+    ScatterRecord scatter;
+    scatter.attenuation = Color(1.0f, 1.0f, 1.0f);
+    if (auto refracted = refract(ray.direction, outwardNormal, ni_over_nt))
+    {
+      float reflectProbability = schlick(cosine, refractiveIndex);
+      isReflected              = randF(gen) < reflectProbability;
+      if (!isReflected)
+      {
+        scatter.ray = Ray(rec.hitPoint, *refracted);
+      }
+    }
+
+    if (isReflected)
+    {
+      Vector3 reflectDir = reflect(ray.direction, rec.normal);
+      scatter.ray        = Ray(rec.hitPoint, reflectDir);
+    }
+
     return scatter;
   }
 };
@@ -309,7 +393,7 @@ RayTracer::generateImage() const
   world.push_back(std::make_unique<Sphere>(
     Vector3(0.0f, 0.0f, -1.0f),
     0.5f,
-    std::make_unique<LambertianMaterial>(Color(0.8f, 0.3f, 0.3f))));
+    std::make_unique<LambertianMaterial>(Color(0.1f, 0.2f, 0.5f))));
   world.push_back(std::make_unique<Sphere>(
     Vector3(0.0f, -100.5f, -1.0f),
     100.f,
@@ -318,11 +402,11 @@ RayTracer::generateImage() const
   world.push_back(std::make_unique<Sphere>(
     Vector3(1.0f, 0.0f, -1.0f),
     0.5f,
-    std::make_unique<MetalMaterial>(Color(0.8f, 0.6f, 0.2f), 1.0f)));
+    std::make_unique<MetalMaterial>(Color(0.8f, 0.6f, 0.2f), 0.0f)));
   world.push_back(std::make_unique<Sphere>(
     Vector3(-1.0f, 0.0f, -1.0f),
-    0.5f,
-    std::make_unique<MetalMaterial>(Color(0.8f, 0.8f, 0.8f), 0.3f)));
+    -0.5f,
+    std::make_unique<DielectricMaterial>(1.5f)));
 
   for (int j = 0; j < nY; ++j)
   {
