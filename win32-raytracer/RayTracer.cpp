@@ -418,35 +418,11 @@ getColor(
 }
 
 //------------------------------------------------------------------------------
-RayTracer::RayTracer() {}
-
-//------------------------------------------------------------------------------
-Image
-RayTracer::generateImage() const
+std::vector<std::unique_ptr<IHitable>>
+getTestScene()
 {
-  const size_t nX = ray::IMAGE_WIDTH;
-  const size_t nY = ray::IMAGE_HEIGHT;
-
   using DirectX::SimpleMath::Color;
-  const Color SAMPLE_COUNT(NUM_SAMPLES, NUM_SAMPLES, NUM_SAMPLES);
-
-  Image image;
-  image.width  = nX;
-  image.height = nY;
-  image.buffer.resize(nX * nY);
-
   using DirectX::SimpleMath::Vector3;
-
-  const auto lookFrom     = Vector3(3.0f, 3.0f, 2.0f);
-  const auto lookTo       = Vector3(0.0f, 0.0f, -1.5f);
-  const auto upDir        = Vector3(0.0f, 1.0f, 0.0f);
-  const float fov         = 20.0f;
-  const float aspectRatio = static_cast<float>(nX) / nY;
-  const float distToFocus = (lookTo - lookFrom).Length();
-  const float aperture    = 2.0f;
-
-  Camera camera(
-    lookFrom, lookTo, upDir, fov, aspectRatio, aperture, distToFocus);
 
   std::vector<std::unique_ptr<IHitable>> world;
   world.push_back(std::make_unique<Sphere>(
@@ -469,6 +445,130 @@ RayTracer::generateImage() const
     -0.5f,
     std::make_unique<DielectricMaterial>(1.5f)));
 
+  return world;
+}
+
+//------------------------------------------------------------------------------
+std::vector<std::unique_ptr<IHitable>>
+generateRandomScene()
+{
+  const float RADIUS = 0.2f;
+  enum class Mat
+  {
+    Diffuse,
+    Metal,
+    Glass
+  };
+  auto getMaterialType = [](float materialChoice) -> Mat {
+    if (materialChoice < 0.8f)
+    {
+      return Mat::Diffuse;
+    }
+    else if (materialChoice < 0.95f)
+    {
+      return Mat::Metal;
+    }
+    return Mat::Glass;
+  };
+
+  using DirectX::SimpleMath::Color;
+  using DirectX::SimpleMath::Vector3;
+
+  std::vector<std::unique_ptr<IHitable>> world;
+  world.push_back(std::make_unique<Sphere>(
+    Vector3(0.0f, -1000.0f, 0.0f),
+    1000.f,
+    std::make_unique<LambertianMaterial>(Color(0.5f, 0.5f, 0.5f))));
+
+  world.push_back(std::make_unique<Sphere>(
+    Vector3(0.0f, 1.0f, 0.0f),
+    1.0f,
+    std::make_unique<DielectricMaterial>(1.5f)));
+
+  world.push_back(std::make_unique<Sphere>(
+    Vector3(-4.0f, 1.0f, 0.0f),
+    1.0f,
+    std::make_unique<LambertianMaterial>(Color(0.4f, 0.2f, 0.1f))));
+
+  world.push_back(std::make_unique<Sphere>(
+    Vector3(4.0f, 1.0f, 0.0f),
+    1.0f,
+    std::make_unique<MetalMaterial>(Color(0.7f, 0.6f, 0.5f), 0.0f)));
+
+  Color color;
+  float fuzz;
+  for (int a = -11; a < 11; ++a)
+  {
+    for (int b = -11; b < 11; ++b)
+    {
+      Vector3 center(a + 0.9f * randF(gen), RADIUS, b + 0.9f * randF(gen));
+      Mat material = getMaterialType(randF(gen));
+      switch (material)
+      {
+        case Mat::Diffuse:
+          color = Color(
+            randF(gen) * randF(gen),
+            randF(gen) * randF(gen),
+            randF(gen) * randF(gen));
+
+          world.push_back(std::make_unique<Sphere>(
+            center, RADIUS, std::make_unique<LambertianMaterial>(color)));
+          break;
+
+        case Mat::Metal:
+          fuzz  = 0.5f * randF(gen);
+          color = Color(
+            0.5f * (1.0f + randF(gen)),
+            0.5f * (1.0f + randF(gen)),
+            0.5f * (1.0f + randF(gen)));
+
+          world.push_back(std::make_unique<Sphere>(
+            center, RADIUS, std::make_unique<MetalMaterial>(color, fuzz)));
+          break;
+
+        case Mat::Glass:
+          world.push_back(std::make_unique<Sphere>(
+            center, RADIUS, std::make_unique<DielectricMaterial>(1.5f)));
+          break;
+      }
+    }
+  }
+
+  return world;
+}
+
+//------------------------------------------------------------------------------
+RayTracer::RayTracer() {}
+
+//------------------------------------------------------------------------------
+Image
+RayTracer::generateImage() const
+{
+  const size_t nX = ray::IMAGE_WIDTH;
+  const size_t nY = ray::IMAGE_HEIGHT;
+
+  using DirectX::SimpleMath::Color;
+  const Color SAMPLE_COUNT(NUM_SAMPLES, NUM_SAMPLES, NUM_SAMPLES);
+
+  Image image;
+  image.width  = nX;
+  image.height = nY;
+  image.buffer.resize(nX * nY);
+
+  using DirectX::SimpleMath::Vector3;
+
+  const auto lookFrom     = Vector3(15.0f, 2.0f, 4.0f);
+  const auto lookTo       = Vector3(0.0f, 1.0f, 0.0f);
+  const auto upDir        = Vector3(0.0f, 1.0f, 0.0f);
+  const float fov         = 20.0f;
+  const float aspectRatio = static_cast<float>(nX) / nY;
+  const float distToFocus = (lookTo - lookFrom).Length();
+  const float aperture    = 0.1f;
+
+  Camera camera(
+    lookFrom, lookTo, upDir, fov, aspectRatio, aperture, distToFocus);
+
+  auto world = generateRandomScene();
   for (int j = 0; j < nY; ++j)
   {
     for (int i = 0; i < nX; ++i)
