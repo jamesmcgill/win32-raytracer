@@ -155,32 +155,6 @@ struct Camera
 };
 
 //------------------------------------------------------------------------------
-struct ScatterRecord
-{
-  DirectX::SimpleMath::Color attenuation;
-  DirectX::SimpleMath::Ray ray;
-};
-
-//------------------------------------------------------------------------------
-struct IMaterial;
-struct HitRecord
-{
-  DirectX::SimpleMath::Vector3 hitPoint;
-  DirectX::SimpleMath::Vector3 normal;
-  float t;
-  IMaterial* pMaterial;
-};
-
-//------------------------------------------------------------------------------
-struct IMaterial
-{
-  virtual std::optional<ScatterRecord>
-  scatter(const DirectX::SimpleMath::Ray& ray, const HitRecord& rec) const = 0;
-
-  virtual ~IMaterial() = default;
-};
-
-//------------------------------------------------------------------------------
 struct LambertianMaterial : public IMaterial
 {
   const DirectX::SimpleMath::Color albedo;
@@ -302,15 +276,6 @@ struct DielectricMaterial : public IMaterial
 };
 
 //------------------------------------------------------------------------------
-struct IHitable
-{
-  virtual std::optional<HitRecord>
-  hit(const DirectX::SimpleMath::Ray& ray, float tMin, float tMax) const = 0;
-
-  virtual ~IHitable() = default;
-};
-
-//------------------------------------------------------------------------------
 struct Sphere : public IHitable
 {
   Sphere() = default;
@@ -418,8 +383,8 @@ getColor(
 }
 
 //------------------------------------------------------------------------------
-std::vector<std::unique_ptr<IHitable>>
-getTestScene()
+RayTracer::World
+RayTracer::getTestScene() const
 {
   using DirectX::SimpleMath::Color;
   using DirectX::SimpleMath::Vector3;
@@ -449,8 +414,8 @@ getTestScene()
 }
 
 //------------------------------------------------------------------------------
-std::vector<std::unique_ptr<IHitable>>
-generateRandomScene()
+RayTracer::World
+RayTracer::generateRandomScene() const
 {
   const float RADIUS = 0.2f;
   enum class Mat
@@ -542,7 +507,7 @@ RayTracer::RayTracer() {}
 
 //------------------------------------------------------------------------------
 Image
-RayTracer::generateImage() const
+RayTracer::generateImage(const World& world) const
 {
   const size_t nX = ray::IMAGE_WIDTH;
   const size_t nY = ray::IMAGE_HEIGHT;
@@ -568,7 +533,6 @@ RayTracer::generateImage() const
   Camera camera(
     lookFrom, lookTo, upDir, fov, aspectRatio, aperture, distToFocus);
 
-  auto world = generateRandomScene();
   for (int j = 0; j < nY; ++j)
   {
     for (int i = 0; i < nX; ++i)

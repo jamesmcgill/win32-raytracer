@@ -61,6 +61,8 @@ private:
 
   std::atomic<bool> m_isError = false;
   std::atomic<bool> m_isDone  = false;
+
+  std::atomic<std::chrono::milliseconds> m_buildSceneDuration;
   std::atomic<std::chrono::milliseconds> m_renderDuration;
   std::atomic<std::chrono::milliseconds> m_saveDuration;
   std::thread m_renderThread;
