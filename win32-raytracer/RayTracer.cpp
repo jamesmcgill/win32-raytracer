@@ -86,23 +86,40 @@ struct Camera
   DirectX::SimpleMath::Vector3 vertical;
   DirectX::SimpleMath::Vector3 origin;
 
-  Camera(float verticalFovInDegrees, float aspectRatio)
+  Camera(
+    DirectX::SimpleMath::Vector3 lookFrom,
+    DirectX::SimpleMath::Vector3 lookTo,
+    DirectX::SimpleMath::Vector3 upDir,
+    float verticalFovInDegrees,
+    float aspectRatio)
   {
     const float theta      = DirectX::XMConvertToRadians(verticalFovInDegrees);
     const float halfHeight = tan(theta / 2.0f);
     const float halfWidth  = aspectRatio * halfHeight;
 
     using DirectX::SimpleMath::Vector3;
-    lower_left_corner = Vector3(-halfWidth, -halfHeight, -1.0f);
-    horizontal        = Vector3(2 * halfWidth, 0.0f, 0.0f);
-    vertical          = Vector3(0.0f, 2 * halfHeight, 0.0f);
-    origin            = Vector3(0.0f, 0.0f, 0.0f);
+    Vector3 vLookAtDir = lookTo - lookFrom;
+    vLookAtDir.Normalize();
+
+    Vector3 vRightAxis = vLookAtDir.Cross(upDir);
+    vRightAxis.Normalize();
+
+    Vector3 vUpAxis = vRightAxis.Cross(vLookAtDir);
+    vUpAxis.Normalize();
+
+    Vector3 vLeftEdge = halfWidth * -vRightAxis;
+    Vector3 vBottomEdge   = halfHeight * -vUpAxis;
+
+    origin            = lookFrom;
+    lower_left_corner = origin + vLookAtDir + vLeftEdge + vBottomEdge;
+    horizontal        = 2 * -vLeftEdge;
+    vertical          = 2 * -vBottomEdge;
   }
 
   DirectX::SimpleMath::Ray getRay(float u, float v) const
   {
     return DirectX::SimpleMath::Ray(
-      origin, lower_left_corner + u * horizontal + v * vertical);
+      origin, (lower_left_corner + (u * horizontal) + (v * vertical)) - origin);
   }
 };
 
@@ -387,23 +404,31 @@ RayTracer::generateImage() const
   image.height = nY;
   image.buffer.resize(nX * nY);
 
-  Camera camera(90.0f, static_cast<float>(nX) / nY);
-
   using DirectX::SimpleMath::Vector3;
+
+  const auto lookFrom     = Vector3(-2.0f, 2.0f, 1.0f);
+  const auto lookTo       = Vector3(0.0f, 0.0f, -1.0f);
+  const auto upDir        = Vector3(0.0f, 1.0f, 0.0f);
+  const float fov         = 90.0f;
+  const float aspectRatio = static_cast<float>(nX) / nY;
+  Camera camera(lookFrom, lookTo, upDir, fov, aspectRatio);
+
   std::vector<std::unique_ptr<IHitable>> world;
-  world.push_back(std::make_unique<Sphere>(
-    Vector3(0.0f, 0.0f, -1.5f),
-    0.5f,
-    std::make_unique<LambertianMaterial>(Color(0.1f, 0.2f, 0.5f))));
   world.push_back(std::make_unique<Sphere>(
     Vector3(0.0f, -100.5f, -1.5f),
     100.f,
     std::make_unique<LambertianMaterial>(Color(0.8f, 0.8f, 0.0f))));
 
   world.push_back(std::make_unique<Sphere>(
+    Vector3(0.0f, 0.0f, -1.5f),
+    0.5f,
+    std::make_unique<LambertianMaterial>(Color(0.1f, 0.2f, 0.5f))));
+
+  world.push_back(std::make_unique<Sphere>(
     Vector3(1.0f, 0.0f, -1.5f),
     0.5f,
     std::make_unique<MetalMaterial>(Color(0.8f, 0.6f, 0.2f), 0.0f)));
+
   world.push_back(std::make_unique<Sphere>(
     Vector3(-1.0f, 0.0f, -1.5f),
     -0.5f,
