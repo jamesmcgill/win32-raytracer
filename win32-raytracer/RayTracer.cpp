@@ -79,47 +79,78 @@ getRandomPointInUnitSphere()
 }
 
 //------------------------------------------------------------------------------
+DirectX::SimpleMath::Vector3
+getRandomPointOnUnitDisc()
+{
+  using DirectX::SimpleMath::Vector3;
+  Vector3 point;
+  do
+  {
+    point
+      = 2.0f * Vector3(randF(gen), randF(gen), 0.0f) - Vector3(1.f, 1.f, 0.f);
+  } while (point.Dot(point) >= 1.0f);
+
+  return point;
+}
+
+//------------------------------------------------------------------------------
 struct Camera
 {
-  DirectX::SimpleMath::Vector3 lower_left_corner;
-  DirectX::SimpleMath::Vector3 horizontal;
-  DirectX::SimpleMath::Vector3 vertical;
-  DirectX::SimpleMath::Vector3 origin;
+  using Vector3 = DirectX::SimpleMath::Vector3;
+
+  Vector3 lower_left_corner;
+  Vector3 horizontal;
+  Vector3 vertical;
+  Vector3 origin;
+
+  Vector3 vLookAtDir;
+  Vector3 vRightAxis;
+  Vector3 vUpAxis;
+
+  float lensRadius = 1.0f;
 
   Camera(
     DirectX::SimpleMath::Vector3 lookFrom,
     DirectX::SimpleMath::Vector3 lookTo,
     DirectX::SimpleMath::Vector3 upDir,
     float verticalFovInDegrees,
-    float aspectRatio)
+    float aspectRatio,
+    float aperture,
+    float focusDist)
   {
+    lensRadius             = aperture / 2.0f;
     const float theta      = DirectX::XMConvertToRadians(verticalFovInDegrees);
     const float halfHeight = tan(theta / 2.0f);
     const float halfWidth  = aspectRatio * halfHeight;
 
-    using DirectX::SimpleMath::Vector3;
-    Vector3 vLookAtDir = lookTo - lookFrom;
+    vLookAtDir = lookTo - lookFrom;
     vLookAtDir.Normalize();
 
-    Vector3 vRightAxis = vLookAtDir.Cross(upDir);
+    vRightAxis = vLookAtDir.Cross(upDir);
     vRightAxis.Normalize();
 
-    Vector3 vUpAxis = vRightAxis.Cross(vLookAtDir);
+    vUpAxis = vRightAxis.Cross(vLookAtDir);
     vUpAxis.Normalize();
 
-    Vector3 vLeftEdge = halfWidth * -vRightAxis;
-    Vector3 vBottomEdge   = halfHeight * -vUpAxis;
+    Vector3 vLeftEdge   = halfWidth * -vRightAxis;
+    Vector3 vBottomEdge = halfHeight * -vUpAxis;
 
     origin            = lookFrom;
-    lower_left_corner = origin + vLookAtDir + vLeftEdge + vBottomEdge;
-    horizontal        = 2 * -vLeftEdge;
-    vertical          = 2 * -vBottomEdge;
+    lower_left_corner = origin + (vLookAtDir * focusDist)
+                        + (vLeftEdge * focusDist) + (vBottomEdge * focusDist);
+    horizontal = 2 * -vLeftEdge * focusDist;
+    vertical   = 2 * -vBottomEdge * focusDist;
   }
 
   DirectX::SimpleMath::Ray getRay(float u, float v) const
   {
+    Vector3 pointOnLens = lensRadius * getRandomPointOnUnitDisc();
+    Vector3 offset      = vRightAxis * pointOnLens.x + vUpAxis * pointOnLens.y;
+
     return DirectX::SimpleMath::Ray(
-      origin, (lower_left_corner + (u * horizontal) + (v * vertical)) - origin);
+      origin + offset,
+      (lower_left_corner + (u * horizontal) + (v * vertical))
+        - (origin + offset));
   }
 };
 
@@ -406,12 +437,16 @@ RayTracer::generateImage() const
 
   using DirectX::SimpleMath::Vector3;
 
-  const auto lookFrom     = Vector3(-2.0f, 2.0f, 1.0f);
-  const auto lookTo       = Vector3(0.0f, 0.0f, -1.0f);
+  const auto lookFrom     = Vector3(3.0f, 3.0f, 2.0f);
+  const auto lookTo       = Vector3(0.0f, 0.0f, -1.5f);
   const auto upDir        = Vector3(0.0f, 1.0f, 0.0f);
-  const float fov         = 90.0f;
+  const float fov         = 20.0f;
   const float aspectRatio = static_cast<float>(nX) / nY;
-  Camera camera(lookFrom, lookTo, upDir, fov, aspectRatio);
+  const float distToFocus = (lookTo - lookFrom).Length();
+  const float aperture    = 2.0f;
+
+  Camera camera(
+    lookFrom, lookTo, upDir, fov, aspectRatio, aperture, distToFocus);
 
   std::vector<std::unique_ptr<IHitable>> world;
   world.push_back(std::make_unique<Sphere>(
