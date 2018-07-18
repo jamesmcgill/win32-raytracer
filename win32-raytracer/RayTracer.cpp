@@ -86,15 +86,16 @@ struct Camera
   DirectX::SimpleMath::Vector3 vertical;
   DirectX::SimpleMath::Vector3 origin;
 
-  Camera()
+  Camera(float verticalFovInDegrees, float aspectRatio)
   {
-    const float HALF_X = ray::IMAGE_WIDTH / 200.f;
-    const float HALF_Y = ray::IMAGE_HEIGHT / 200.f;
+    const float theta      = DirectX::XMConvertToRadians(verticalFovInDegrees);
+    const float halfHeight = tan(theta / 2.0f);
+    const float halfWidth  = aspectRatio * halfHeight;
 
     using DirectX::SimpleMath::Vector3;
-    lower_left_corner = Vector3(-HALF_X, -HALF_Y, -1.0f);
-    horizontal        = Vector3(2 * HALF_X, 0.0f, 0.0f);
-    vertical          = Vector3(0.0f, 2 * HALF_Y, 0.0f);
+    lower_left_corner = Vector3(-halfWidth, -halfHeight, -1.0f);
+    horizontal        = Vector3(2 * halfWidth, 0.0f, 0.0f);
+    vertical          = Vector3(0.0f, 2 * halfHeight, 0.0f);
     origin            = Vector3(0.0f, 0.0f, 0.0f);
   }
 
@@ -386,25 +387,25 @@ RayTracer::generateImage() const
   image.height = nY;
   image.buffer.resize(nX * nY);
 
-  Camera camera;
+  Camera camera(90.0f, static_cast<float>(nX) / nY);
 
   using DirectX::SimpleMath::Vector3;
   std::vector<std::unique_ptr<IHitable>> world;
   world.push_back(std::make_unique<Sphere>(
-    Vector3(0.0f, 0.0f, -1.0f),
+    Vector3(0.0f, 0.0f, -1.5f),
     0.5f,
     std::make_unique<LambertianMaterial>(Color(0.1f, 0.2f, 0.5f))));
   world.push_back(std::make_unique<Sphere>(
-    Vector3(0.0f, -100.5f, -1.0f),
+    Vector3(0.0f, -100.5f, -1.5f),
     100.f,
     std::make_unique<LambertianMaterial>(Color(0.8f, 0.8f, 0.0f))));
 
   world.push_back(std::make_unique<Sphere>(
-    Vector3(1.0f, 0.0f, -1.0f),
+    Vector3(1.0f, 0.0f, -1.5f),
     0.5f,
     std::make_unique<MetalMaterial>(Color(0.8f, 0.6f, 0.2f), 0.0f)));
   world.push_back(std::make_unique<Sphere>(
-    Vector3(-1.0f, 0.0f, -1.0f),
+    Vector3(-1.0f, 0.0f, -1.5f),
     -0.5f,
     std::make_unique<DielectricMaterial>(1.5f)));
 
