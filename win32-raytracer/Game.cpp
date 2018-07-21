@@ -61,30 +61,20 @@ Game::Initialize(HWND window, int width, int height)
 
   // Start Rendering
   auto render = [&]() {
-    auto start = std::chrono::high_resolution_clock::now();
-    auto last  = start;
-
     ray::RayTracer rt;
-    auto world = rt.generateRandomScene();
-    auto now   = std::chrono::high_resolution_clock::now();
-    m_buildSceneDuration
-      = std::chrono::duration_cast<std::chrono::milliseconds>(now - last);
-    last = now;
+    auto world = rt.getTestScene();
+
+    auto start   = std::chrono::high_resolution_clock::now();
 
     auto image = rt.generateImage(world);
-    now        = std::chrono::high_resolution_clock::now();
-    m_renderDuration
-      = std::chrono::duration_cast<std::chrono::milliseconds>(now - last);
-    last = now;
+
+    m_renderDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::high_resolution_clock::now() - start);
 
     if (!rt.saveImage(image, IMAGE_FILENAME))
     {
       m_isError = true;
     }
-    now = std::chrono::high_resolution_clock::now();
-    m_saveDuration
-      = std::chrono::duration_cast<std::chrono::milliseconds>(now - last);
-    last = now;
 
     m_isDone = true;
   };
@@ -205,9 +195,7 @@ Game::Render()
       m_spriteBatch->End();
     }
 
-    ImGui::Text("Scene building duration: %ld ms", m_buildSceneDuration.load());
     ImGui::Text("Render duration: %ld ms", m_renderDuration.load());
-    ImGui::Text("File Save duration: %ld ms", m_saveDuration.load());
   }
   else
   {

@@ -391,22 +391,22 @@ RayTracer::getTestScene() const
 
   std::vector<std::unique_ptr<IHitable>> world;
   world.push_back(std::make_unique<Sphere>(
-    Vector3(0.0f, -100.5f, -1.5f),
+    Vector3(0.0f, -100.5f, 0.0f),
     100.f,
     std::make_unique<LambertianMaterial>(Color(0.8f, 0.8f, 0.0f))));
 
   world.push_back(std::make_unique<Sphere>(
-    Vector3(0.0f, 0.0f, -1.5f),
+    Vector3(0.0f, 0.0f, 0.0f),
     0.5f,
     std::make_unique<LambertianMaterial>(Color(0.1f, 0.2f, 0.5f))));
 
   world.push_back(std::make_unique<Sphere>(
-    Vector3(1.0f, 0.0f, -1.5f),
+    Vector3(1.0f, 0.0f, 0.0f),
     0.5f,
     std::make_unique<MetalMaterial>(Color(0.8f, 0.6f, 0.2f), 0.0f)));
 
   world.push_back(std::make_unique<Sphere>(
-    Vector3(-1.0f, 0.0f, -1.5f),
+    Vector3(-1.0f, 0.0f, 0.0f),
     -0.5f,
     std::make_unique<DielectricMaterial>(1.5f)));
 
@@ -522,8 +522,8 @@ RayTracer::generateImage(const World& world) const
 
   using DirectX::SimpleMath::Vector3;
 
-  const auto lookFrom     = Vector3(15.0f, 2.0f, 4.0f);
-  const auto lookTo       = Vector3(0.0f, 1.0f, 0.0f);
+  const auto lookFrom     = Vector3(5.0f, 1.0f, 4.0f);
+  const auto lookTo       = Vector3(0.0f, 0.0f, 0.0f);
   const auto upDir        = Vector3(0.0f, 1.0f, 0.0f);
   const float fov         = 20.0f;
   const float aspectRatio = static_cast<float>(nX) / nY;
