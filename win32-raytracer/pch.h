@@ -86,6 +86,7 @@
 #include <limits>
 #include <stdio.h>
 #include <random>
+#include <numeric>
 
 #ifdef _DEBUG
 #include <dxgidebug.h>
@@ -163,9 +164,11 @@ struct Image
   ImageBuffer buffer;
 };
 
-const size_t IMAGE_WIDTH  = 800;
-const size_t IMAGE_HEIGHT = 600;
-const int NUM_SAMPLES     = 100;
-const int MAX_RECURSION   = 50;
+constexpr size_t IMAGE_WIDTH  = 800;
+constexpr size_t IMAGE_HEIGHT = 600;
+constexpr int NUM_SAMPLES     = 100;
+constexpr int MAX_RECURSION   = 50;
+
+static const wchar_t* IMAGE_FILENAME = L"out.bmp";
 };
 //------------------------------------------------------------------------------

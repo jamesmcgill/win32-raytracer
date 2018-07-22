@@ -1,17 +1,67 @@
 #include "pch.h"
 #include "RayTracer.h"
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#pragma warning(push)
-#pragma warning(disable : 4996)
-#include "stb_image_write.h"
-#pragma warning(pop)
+namespace ray
+{
+//------------------------------------------------------------------------------
+class ThreadContext
+{
+public:
+  ThreadContext()
+      : gen(randomDevice())
+      , randomReal(0.0f, 1.0f)
+  {
+  }
 
-using namespace ray;
+  float randF() { return randomReal(gen); }
 
-std::random_device randomDevice;
-std::default_random_engine gen(randomDevice());
-std::uniform_real_distribution<float> randF(0.0f, 1.0f);
+private:
+  std::random_device randomDevice;
+  std::default_random_engine gen;
+  std::uniform_real_distribution<float> randomReal;
+};
+
+//------------------------------------------------------------------------------
+struct IMaterial;
+struct HitRecord
+{
+  DirectX::SimpleMath::Vector3 hitPoint;
+  DirectX::SimpleMath::Vector3 normal;
+  float t;
+  IMaterial* pMaterial;
+};
+
+//------------------------------------------------------------------------------
+struct ScatterRecord
+{
+  DirectX::SimpleMath::Color attenuation;
+  DirectX::SimpleMath::Ray ray;
+};
+
+//------------------------------------------------------------------------------
+struct IMaterial
+{
+  virtual std::unique_ptr<IMaterial> clone() const = 0;
+
+  virtual std::optional<ScatterRecord> scatter(
+    ThreadContext& ctx,
+    const DirectX::SimpleMath::Ray& ray,
+    const HitRecord& rec) const = 0;
+
+  virtual ~IMaterial() = default;
+};
+
+//------------------------------------------------------------------------------
+struct IHitable
+{
+  virtual std::unique_ptr<IHitable> clone() const = 0;
+
+  virtual std::optional<HitRecord>
+  hit(const DirectX::SimpleMath::Ray& ray, float tMin, float tMax) const = 0;
+
+  virtual ~IHitable() = default;
+};
+using World = std::vector<std::unique_ptr<IHitable>>;
 
 //------------------------------------------------------------------------------
 // [-1, 1] => [0, 1]
@@ -65,13 +115,13 @@ schlick(float cosine, float refractiveIndex)
 
 //------------------------------------------------------------------------------
 DirectX::SimpleMath::Vector3
-getRandomPointInUnitSphere()
+getRandomPointInUnitSphere(ThreadContext& ctx)
 {
   using DirectX::SimpleMath::Vector3;
   Vector3 point;
   do
   {
-    point = 2.0f * Vector3(randF(gen), randF(gen), randF(gen))
+    point = 2.0f * Vector3(ctx.randF(), ctx.randF(), ctx.randF())
             - Vector3(1.f, 1.f, 1.f);
   } while (point.LengthSquared() >= 1.0f);
 
@@ -80,14 +130,14 @@ getRandomPointInUnitSphere()
 
 //------------------------------------------------------------------------------
 DirectX::SimpleMath::Vector3
-getRandomPointOnUnitDisc()
+getRandomPointOnUnitDisc(ThreadContext& ctx)
 {
   using DirectX::SimpleMath::Vector3;
   Vector3 point;
   do
   {
     point
-      = 2.0f * Vector3(randF(gen), randF(gen), 0.0f) - Vector3(1.f, 1.f, 0.f);
+      = 2.0f * Vector3(ctx.randF(), ctx.randF(), 0.0f) - Vector3(1.f, 1.f, 0.f);
   } while (point.Dot(point) >= 1.0f);
 
   return point;
@@ -108,8 +158,10 @@ struct Camera
   Vector3 vUpAxis;
 
   float lensRadius = 1.0f;
+  ThreadContext& ctx;
 
   Camera(
+    ThreadContext& _ctx,
     DirectX::SimpleMath::Vector3 lookFrom,
     DirectX::SimpleMath::Vector3 lookTo,
     DirectX::SimpleMath::Vector3 upDir,
@@ -117,6 +169,7 @@ struct Camera
     float aspectRatio,
     float aperture,
     float focusDist)
+      : ctx(_ctx)
   {
     lensRadius             = aperture / 2.0f;
     const float theta      = DirectX::XMConvertToRadians(verticalFovInDegrees);
@@ -144,7 +197,7 @@ struct Camera
 
   DirectX::SimpleMath::Ray getRay(float u, float v) const
   {
-    Vector3 pointOnLens = lensRadius * getRandomPointOnUnitDisc();
+    Vector3 pointOnLens = lensRadius * getRandomPointOnUnitDisc(ctx);
     Vector3 offset      = vRightAxis * pointOnLens.x + vUpAxis * pointOnLens.y;
 
     return DirectX::SimpleMath::Ray(
@@ -164,8 +217,15 @@ struct LambertianMaterial : public IMaterial
   {
   }
 
+  std::unique_ptr<IMaterial> clone() const override
+  {
+    return std::make_unique<LambertianMaterial>(*this);
+  }
+
   std::optional<ScatterRecord> scatter(
-    const DirectX::SimpleMath::Ray& ray, const HitRecord& rec) const override
+    ThreadContext& ctx,
+    const DirectX::SimpleMath::Ray& ray,
+    const HitRecord& rec) const override
   {
     UNREFERENCED_PARAMETER(ray);
 
@@ -173,7 +233,7 @@ struct LambertianMaterial : public IMaterial
     using DirectX::SimpleMath::Vector3;
 
     Vector3 reflectTo
-      = rec.hitPoint + rec.normal + getRandomPointInUnitSphere();
+      = rec.hitPoint + rec.normal + getRandomPointInUnitSphere(ctx);
     Vector3 reflectDir = reflectTo - rec.hitPoint;
 
     ScatterRecord scatter;
@@ -198,8 +258,15 @@ struct MetalMaterial : public IMaterial
     }
   }
 
+  std::unique_ptr<IMaterial> clone() const override
+  {
+    return std::make_unique<MetalMaterial>(*this);
+  }
+
   std::optional<ScatterRecord> scatter(
-    const DirectX::SimpleMath::Ray& ray, const HitRecord& rec) const override
+    ThreadContext& ctx,
+    const DirectX::SimpleMath::Ray& ray,
+    const HitRecord& rec) const override
   {
     using DirectX::SimpleMath::Ray;
     using DirectX::SimpleMath::Vector3;
@@ -208,7 +275,7 @@ struct MetalMaterial : public IMaterial
     normalisedDir.Normalize();
     Vector3 reflectTo = reflect(normalisedDir, rec.normal);
     Vector3 reflectDir
-      = reflectTo - rec.hitPoint + fuzz * getRandomPointInUnitSphere();
+      = reflectTo - rec.hitPoint + fuzz * getRandomPointInUnitSphere(ctx);
     if (reflectDir.Dot(rec.normal) <= 0.0f)
     {
       return std::nullopt;
@@ -231,8 +298,15 @@ struct DielectricMaterial : public IMaterial
   {
   }
 
+  std::unique_ptr<IMaterial> clone() const override
+  {
+    return std::make_unique<DielectricMaterial>(*this);
+  }
+
   std::optional<ScatterRecord> scatter(
-    const DirectX::SimpleMath::Ray& ray, const HitRecord& rec) const override
+    ThreadContext& ctx,
+    const DirectX::SimpleMath::Ray& ray,
+    const HitRecord& rec) const override
   {
     using DirectX::SimpleMath::Color;
     using DirectX::SimpleMath::Ray;
@@ -258,7 +332,7 @@ struct DielectricMaterial : public IMaterial
     if (auto refracted = refract(ray.direction, outwardNormal, ni_over_nt))
     {
       float reflectProbability = schlick(cosine, refractiveIndex);
-      isReflected              = randF(gen) < reflectProbability;
+      isReflected              = ctx.randF() < reflectProbability;
       if (!isReflected)
       {
         scatter.ray = Ray(rec.hitPoint, *refracted);
@@ -278,7 +352,10 @@ struct DielectricMaterial : public IMaterial
 //------------------------------------------------------------------------------
 struct Sphere : public IHitable
 {
-  Sphere() = default;
+  DirectX::SimpleMath::Vector3 center;
+  float radius = 1.0f;
+  std::unique_ptr<IMaterial> pMaterial;
+
   Sphere(
     DirectX::SimpleMath::Vector3 _center,
     float _radius,
@@ -289,9 +366,17 @@ struct Sphere : public IHitable
   {
   }
 
-  DirectX::SimpleMath::Vector3 center;
-  float radius = 1.0f;
-  std::unique_ptr<IMaterial> pMaterial;
+  Sphere(const Sphere& rhs)
+  {
+    center    = rhs.center;
+    radius    = rhs.radius;
+    pMaterial = rhs.pMaterial->clone();
+  };
+
+  std::unique_ptr<IHitable> clone() const override
+  {
+    return std::make_unique<Sphere>(*this);
+  }
 
   std::optional<HitRecord> hit(
     const DirectX::SimpleMath::Ray& ray, float tMin, float tMax) const override
@@ -333,8 +418,9 @@ struct Sphere : public IHitable
 //------------------------------------------------------------------------------
 DirectX::SimpleMath::Color
 getColor(
+  ThreadContext& ctx,
   const DirectX::SimpleMath::Ray& ray,
-  const std::vector<std::unique_ptr<IHitable>>& world,
+  const World& world,
   int recurseDepth = 0)
 {
   using DirectX::SimpleMath::Color;
@@ -363,10 +449,10 @@ getColor(
   {
     const auto& rec = *hitRecord;
     assert(rec.pMaterial);
-    if (auto scatter = rec.pMaterial->scatter(ray, rec))
+    if (auto scatter = rec.pMaterial->scatter(ctx, ray, rec))
     {
       return scatter->attenuation
-             * getColor(scatter->ray, world, ++recurseDepth);
+             * getColor(ctx, scatter->ray, world, ++recurseDepth);
     }
   }
   else
@@ -383,8 +469,8 @@ getColor(
 }
 
 //------------------------------------------------------------------------------
-RayTracer::World
-RayTracer::getTestScene() const
+World
+getTestScene()
 {
   using DirectX::SimpleMath::Color;
   using DirectX::SimpleMath::Vector3;
@@ -414,9 +500,11 @@ RayTracer::getTestScene() const
 }
 
 //------------------------------------------------------------------------------
-RayTracer::World
-RayTracer::generateRandomScene() const
+World
+generateRandomScene()
 {
+  ThreadContext ctx;
+
   const float RADIUS = 0.2f;
   enum class Mat
   {
@@ -466,26 +554,26 @@ RayTracer::generateRandomScene() const
   {
     for (int b = -11; b < 11; ++b)
     {
-      Vector3 center(a + 0.9f * randF(gen), RADIUS, b + 0.9f * randF(gen));
-      Mat material = getMaterialType(randF(gen));
+      Vector3 center(a + 0.9f * ctx.randF(), RADIUS, b + 0.9f * ctx.randF());
+      Mat material = getMaterialType(ctx.randF());
       switch (material)
       {
         case Mat::Diffuse:
           color = Color(
-            randF(gen) * randF(gen),
-            randF(gen) * randF(gen),
-            randF(gen) * randF(gen));
+            ctx.randF() * ctx.randF(),
+            ctx.randF() * ctx.randF(),
+            ctx.randF() * ctx.randF());
 
           world.push_back(std::make_unique<Sphere>(
             center, RADIUS, std::make_unique<LambertianMaterial>(color)));
           break;
 
         case Mat::Metal:
-          fuzz  = 0.5f * randF(gen);
+          fuzz  = 0.5f * ctx.randF();
           color = Color(
-            0.5f * (1.0f + randF(gen)),
-            0.5f * (1.0f + randF(gen)),
-            0.5f * (1.0f + randF(gen)));
+            0.5f * (1.0f + ctx.randF()),
+            0.5f * (1.0f + ctx.randF()),
+            0.5f * (1.0f + ctx.randF()));
 
           world.push_back(std::make_unique<Sphere>(
             center, RADIUS, std::make_unique<MetalMaterial>(color, fuzz)));
@@ -503,79 +591,120 @@ RayTracer::generateRandomScene() const
 }
 
 //------------------------------------------------------------------------------
-RayTracer::RayTracer() {}
-
-//------------------------------------------------------------------------------
 Image
-RayTracer::generateImage(const World& world) const
+generateImage(
+  const World& world,
+  const int imageWidth,
+  const int imageHeight,
+  const int startY,
+  const int lastY,
+  const int numSamples)
 {
-  const size_t nX = ray::IMAGE_WIDTH;
-  const size_t nY = ray::IMAGE_HEIGHT;
-
-  using DirectX::SimpleMath::Color;
-  const Color SAMPLE_COUNT(NUM_SAMPLES, NUM_SAMPLES, NUM_SAMPLES);
-
-  Image image;
-  image.width  = nX;
-  image.height = nY;
-  image.buffer.resize(nX * nY);
+  ThreadContext ctx;
 
   using DirectX::SimpleMath::Vector3;
-
   const auto lookFrom     = Vector3(5.0f, 1.0f, 4.0f);
   const auto lookTo       = Vector3(0.0f, 0.0f, 0.0f);
   const auto upDir        = Vector3(0.0f, 1.0f, 0.0f);
   const float fov         = 20.0f;
-  const float aspectRatio = static_cast<float>(nX) / nY;
+  const float aspectRatio = static_cast<float>(imageWidth) / imageHeight;
   const float distToFocus = (lookTo - lookFrom).Length();
   const float aperture    = 0.1f;
 
   Camera camera(
-    lookFrom, lookTo, upDir, fov, aspectRatio, aperture, distToFocus);
+    ctx, lookFrom, lookTo, upDir, fov, aspectRatio, aperture, distToFocus);
 
-  for (int j = 0; j < nY; ++j)
+  using DirectX::SimpleMath::Color;
+  const Color SAMPLE_COUNT(
+    static_cast<float>(numSamples),
+    static_cast<float>(numSamples),
+    static_cast<float>(numSamples));
+
+  Image image;
+  image.width  = imageWidth;
+  image.height = lastY - startY;
+  image.buffer.resize(image.width * image.height);
+
+  if (world.empty())
   {
-    for (int i = 0; i < nX; ++i)
+    return image;
+  }
+
+  for (int j = startY; j < lastY; ++j)
+  {
+    for (int i = 0; i < imageWidth; ++i)
     {
       Color color;
-      for (int s = 0; s < NUM_SAMPLES; ++s)
+      for (int s = 0; s < numSamples; ++s)
       {
-        const float u = float(i + randF(gen)) / float(nX);
-        const float v = float(nY - j + randF(gen)) / float(nY);
-        color += getColor(camera.getRay(u, v), world);
+        const float u = float(i + ctx.randF()) / imageWidth;
+        const float v = float(imageHeight - j + ctx.randF()) / imageHeight;
+        color += getColor(ctx, camera.getRay(u, v), world);
       }
       color /= SAMPLE_COUNT;
 
       // Gamma Correction
       color = Color(sqrt(color.R()), sqrt(color.G()), sqrt(color.B()));
 
-      auto& dest = image.buffer[j * nX + i];
-      dest[0]    = u8(255.99 * color.R());
-      dest[1]    = u8(255.99 * color.G());
-      dest[2]    = u8(255.99 * color.B());
+      auto& dest = image.buffer[(j - startY) * imageWidth + i];
+      dest[0]    = u8(255.99f * color.R());
+      dest[1]    = u8(255.99f * color.G());
+      dest[2]    = u8(255.99f * color.B());
     }
   }
   return image;
 }
 
 //------------------------------------------------------------------------------
-bool
-RayTracer::saveImage(const Image& image, const std::wstring& fileName) const
+RenderResult
+render(const int imageWidth, const int imageHeight, const int numSamples)
 {
-  CHAR strFile[MAX_PATH];
-  WideCharToMultiByte(
-    CP_ACP,
-    WC_NO_BEST_FIT_CHARS,
-    fileName.c_str(),
-    -1,
-    strFile,
-    MAX_PATH,
-    nullptr,
-    FALSE);
+  RenderResult res;
 
-  return (
-    stbi_write_bmp(strFile, image.width, image.height, 3, image.buffer.data())
-    != 0);
+  auto start = std::chrono::high_resolution_clock::now();
+
+  auto cloneWorld = [](const World& world) -> World {
+    World newWorld;
+    newWorld.reserve(world.size());
+    std::transform(
+      world.begin(),
+      world.end(),
+      std::back_inserter(newWorld),
+      [](const auto& p) { return p->clone(); });
+    return newWorld;
+  };
+  auto world = getTestScene();
+
+  const int NUM_THREADS = 16;
+  std::thread threads[NUM_THREADS];
+  res.imageParts.resize(NUM_THREADS);
+  const int renderHeight = imageHeight / NUM_THREADS;
+
+  int startY = 0;
+  int endY   = 0;
+  for (int i = 0; i < NUM_THREADS; ++i)
+  {
+    endY = (i == NUM_THREADS - 1) ? imageHeight : (endY + renderHeight);
+
+    auto newWorld = cloneWorld(world);
+    threads[i]    = std::thread([=, &res, w{std::move(newWorld)}]() {
+      res.imageParts[i] = std::move(
+        generateImage(w, imageWidth, imageHeight, startY, endY, numSamples));
+    });
+
+    startY = endY;
+  }
+
+  for (int i = 0; i < NUM_THREADS; ++i)
+  {
+    threads[i].join();
+  }
+
+  res.renderDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::high_resolution_clock::now() - start);
+
+  return res;
 }
 
 //------------------------------------------------------------------------------
+};    // namespace ray

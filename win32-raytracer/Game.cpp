@@ -6,11 +6,15 @@
 #include "Game.h"
 #include "RayTracer.h"
 
+#define STBI_MSC_SECURE_CRT
 #define STB_IMAGE_IMPLEMENTATION
 #pragma warning(push)
-#pragma warning(disable : 4100)
+#pragma warning(disable : 4100)    // Unreferenced parameter
 #include "stb_image.h"
 #pragma warning(pop)
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 extern void ExitGame();
 
@@ -18,7 +22,25 @@ using namespace DirectX;
 
 using Microsoft::WRL::ComPtr;
 
-static const wchar_t* IMAGE_FILENAME = L"out.bmp";
+//------------------------------------------------------------------------------
+bool
+saveImage(const ray::Image& image, const std::wstring& fileName)
+{
+  CHAR strFile[MAX_PATH];
+  WideCharToMultiByte(
+    CP_ACP,
+    WC_NO_BEST_FIT_CHARS,
+    fileName.c_str(),
+    -1,
+    strFile,
+    MAX_PATH,
+    nullptr,
+    FALSE);
+
+  return (
+    stbi_write_bmp(strFile, image.width, image.height, 3, image.buffer.data())
+    != 0);
+}
 
 //------------------------------------------------------------------------------
 Game::Game() noexcept(false)
@@ -59,28 +81,38 @@ Game::Initialize(HWND window, int width, int height)
   // TODO: Fill optional settings of the io structure later.
   // TODO: Load fonts if you don't want to use the default font.
 
-  // Start Rendering
-  auto render = [&]() {
-    ray::RayTracer rt;
-    auto world = rt.getTestScene();
+  auto onRenderComplete = [this](const ray::RenderResult& result) {
+    m_renderDuration = result.renderDuration;
 
-    auto start   = std::chrono::high_resolution_clock::now();
+    if (result.imageParts.empty())
+    {
+      m_isError     = true;
+      m_isRendering = false;
+      return;
+    }
 
-    auto image = rt.generateImage(world);
+    // Stich image pieces together
+    ray::Image image;
+    image.width  = ray::IMAGE_WIDTH;
+    image.height = 0;
+    for (const auto& i : result.imageParts)
+    {
+      image.buffer.insert(image.buffer.end(), i.buffer.begin(), i.buffer.end());
+      image.height += i.height;
+    }
 
-    m_renderDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::high_resolution_clock::now() - start);
-
-    if (!rt.saveImage(image, IMAGE_FILENAME))
+    if (!saveImage(image, ray::IMAGE_FILENAME))
     {
       m_isError = true;
     }
 
-    m_isDone = true;
+    m_isRendering = false;    // Always set last
   };
 
-  m_isDone       = false;
-  m_renderThread = std::thread(render);
+  // Start Rendering
+  m_isRendering  = true;
+  m_renderThread = ray::asyncRender(
+    ray::IMAGE_WIDTH, ray::IMAGE_HEIGHT, ray::NUM_SAMPLES, onRenderComplete);
 }
 
 //------------------------------------------------------------------------------
@@ -134,7 +166,7 @@ Game::CreateTexture()
   ComPtr<ID3D11Resource> resource;
   DX::ThrowIfFailed(CreateWICTextureFromFile(
     m_deviceResources->GetD3DDevice(),
-    IMAGE_FILENAME,
+    ray::IMAGE_FILENAME,
     resource.GetAddressOf(),
     m_texture.ReleaseAndGetAddressOf()));
 
@@ -173,7 +205,11 @@ Game::Render()
   ImGui_ImplWin32_NewFrame();
   ImGui::NewFrame();
 
-  if (m_isDone)
+  if (m_isRendering)
+  {
+    ImGui::Text("Reticulating splines...");
+  }
+  else
   {
     if (m_isError)
     {
@@ -196,10 +232,6 @@ Game::Render()
     }
 
     ImGui::Text("Render duration: %ld ms", m_renderDuration.load());
-  }
-  else
-  {
-    ImGui::Text("Reticulating splines...");
   }
 
   // auto context = m_deviceResources->GetD3DDeviceContext();
@@ -303,7 +335,8 @@ Game::OnWindowSizeChanged(int width, int height)
 void
 Game::GetDefaultSize(int& width, int& height) const
 {
-  // TODO: Change to desired default window size (note minimum size is 320x200).
+  // TODO: Change to desired default window size (note minimum size is
+  // 320x200).
   width  = ray::IMAGE_WIDTH;
   height = ray::IMAGE_HEIGHT;
 }

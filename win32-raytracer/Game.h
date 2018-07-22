@@ -59,14 +59,13 @@ private:
 
   HWND m_hwnd = nullptr;
 
-  std::atomic<bool> m_isError = false;
-  std::atomic<bool> m_isDone  = false;
-
-  std::atomic<std::chrono::milliseconds> m_renderDuration;
-  std::thread m_renderThread;
-
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_texture;
   bool m_isTextureCreated = false;
+
+  std::atomic<bool> m_isRendering = true;
+  std::atomic<bool> m_isError     = false;
+  std::atomic<std::chrono::milliseconds> m_renderDuration;
+  std::thread m_renderThread;
 
   std::unique_ptr<DirectX::SpriteBatch> m_spriteBatch;
   DirectX::SimpleMath::Vector2 m_screenPos;
