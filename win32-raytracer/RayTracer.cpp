@@ -1,24 +1,70 @@
 #include "pch.h"
 #include "RayTracer.h"
 
+#include "emmintrin.h"
+
+__declspec(align(16)) static const unsigned int INT_MAX_VEC[4]
+  = {INT_MAX, INT_MAX, INT_MAX, INT_MAX};
+__declspec(align(16)) static const __m128i INT_MAX_VEC_MM = _mm_load_si128(
+  (__m128i*)INT_MAX_VEC);
+__declspec(align(16)) static const __m128 F_MAX_VEC_MM = _mm_cvtepi32_ps(
+  INT_MAX_VEC_MM);
+
 namespace ray
 {
 //------------------------------------------------------------------------------
 class ThreadContext
 {
 public:
-  ThreadContext()
-      : gen(randomDevice())
-      , randomReal(0.0f, 1.0f)
+  ThreadContext() { srand_sse(666); }
+
+  // Modified from:
+  // https://software.intel.com/en-us/articles/fast-random-number-generator-on-the-intel-pentiumr-4-processor/
+  inline void rand_sse(float* result)
   {
+    __declspec(align(16)) __m128i cur_seed_split;
+    __declspec(align(16)) __m128i multiplier;
+    __declspec(align(16)) __m128i adder;
+    __declspec(align(16)) __m128i mod_mask;
+    __declspec(align(16)) __m128i sra_mask;
+    __declspec(align(16)) static const unsigned int mult[4]
+      = {214013, 17405, 214013, 69069};
+    __declspec(align(16)) static const unsigned int gadd[4]
+      = {2531011, 10395331, 13737667, 1};
+    __declspec(align(16)) static const unsigned int mask[4]
+      = {0xFFFFFFFF, 0, 0xFFFFFFFF, 0};
+    __declspec(align(16)) static const unsigned int masklo[4]
+      = {0x00007FFF, 0x00007FFF, 0x00007FFF, 0x00007FFF};
+    adder          = _mm_load_si128((__m128i*)gadd);
+    multiplier     = _mm_load_si128((__m128i*)mult);
+    mod_mask       = _mm_load_si128((__m128i*)mask);
+    sra_mask       = _mm_load_si128((__m128i*)masklo);
+    cur_seed_split = _mm_shuffle_epi32(cur_seed, _MM_SHUFFLE(2, 3, 0, 1));
+    cur_seed       = _mm_mul_epu32(cur_seed, multiplier);
+    multiplier     = _mm_shuffle_epi32(multiplier, _MM_SHUFFLE(2, 3, 0, 1));
+    cur_seed_split = _mm_mul_epu32(cur_seed_split, multiplier);
+    cur_seed       = _mm_and_si128(cur_seed, mod_mask);
+    cur_seed_split = _mm_and_si128(cur_seed_split, mod_mask);
+    cur_seed_split = _mm_shuffle_epi32(cur_seed_split, _MM_SHUFFLE(2, 3, 0, 1));
+    cur_seed       = _mm_or_si128(cur_seed, cur_seed_split);
+    cur_seed       = _mm_add_epi32(cur_seed, adder);
+
+    // CUSTOM CODE for returning floats in range [0 -> 1)
+    __declspec(align(16)) __m128 realConversion;
+    realConversion = _mm_cvtepi32_ps(cur_seed);
+    realConversion = _mm_div_ps(realConversion, F_MAX_VEC_MM);
+    _mm_store_ps(result, realConversion);
+
+    return;
   }
 
-  float randF() { return randomReal(gen); }
-
 private:
-  std::random_device randomDevice;
-  std::default_random_engine gen;
-  std::uniform_real_distribution<float> randomReal;
+  __declspec(align(16)) __m128i cur_seed;
+
+  void srand_sse(unsigned int seed)
+  {
+    cur_seed = _mm_set_epi32(seed, seed + 1, seed, seed + 1);
+  }
 };
 
 //------------------------------------------------------------------------------
@@ -119,10 +165,11 @@ getRandomPointInUnitSphere(ThreadContext& ctx)
 {
   using DirectX::SimpleMath::Vector3;
   Vector3 point;
+  float r[4];
   do
   {
-    point = 2.0f * Vector3(ctx.randF(), ctx.randF(), ctx.randF())
-            - Vector3(1.f, 1.f, 1.f);
+    ctx.rand_sse(r);
+    point = 2.0f * Vector3(r[0], r[1], r[2]) - Vector3(1.f, 1.f, 1.f);
   } while (point.LengthSquared() >= 1.0f);
 
   return point;
@@ -134,10 +181,11 @@ getRandomPointOnUnitDisc(ThreadContext& ctx)
 {
   using DirectX::SimpleMath::Vector3;
   Vector3 point;
+  float r[4];
   do
   {
-    point
-      = 2.0f * Vector3(ctx.randF(), ctx.randF(), 0.0f) - Vector3(1.f, 1.f, 0.f);
+    ctx.rand_sse(r);
+    point = 2.0f * Vector3(r[0], r[1], 0.0f) - Vector3(1.f, 1.f, 0.f);
   } while (point.Dot(point) >= 1.0f);
 
   return point;
@@ -332,7 +380,9 @@ struct DielectricMaterial : public IMaterial
     if (auto refracted = refract(ray.direction, outwardNormal, ni_over_nt))
     {
       float reflectProbability = schlick(cosine, refractiveIndex);
-      isReflected              = ctx.randF() < reflectProbability;
+      float r[4];
+      ctx.rand_sse(r);
+      isReflected = r[0] < reflectProbability;
       if (!isReflected)
       {
         scatter.ray = Ray(rec.hitPoint, *refracted);
@@ -550,30 +600,29 @@ generateRandomScene()
 
   Color color;
   float fuzz;
+  float r[4];
   for (int a = -11; a < 11; ++a)
   {
     for (int b = -11; b < 11; ++b)
     {
-      Vector3 center(a + 0.9f * ctx.randF(), RADIUS, b + 0.9f * ctx.randF());
-      Mat material = getMaterialType(ctx.randF());
+      ctx.rand_sse(r);
+      Vector3 center(a + 0.9f * r[0], RADIUS, b + 0.9f * r[1]);
+      Mat material = getMaterialType(r[2]);
       switch (material)
       {
         case Mat::Diffuse:
-          color = Color(
-            ctx.randF() * ctx.randF(),
-            ctx.randF() * ctx.randF(),
-            ctx.randF() * ctx.randF());
+          ctx.rand_sse(r);
+          color = Color(r[0] * r[1], r[1] * r[2], r[2] * r[3]);
 
           world.push_back(std::make_unique<Sphere>(
             center, RADIUS, std::make_unique<LambertianMaterial>(color)));
           break;
 
         case Mat::Metal:
-          fuzz  = 0.5f * ctx.randF();
+          ctx.rand_sse(r);
+          fuzz  = 0.5f * r[0];
           color = Color(
-            0.5f * (1.0f + ctx.randF()),
-            0.5f * (1.0f + ctx.randF()),
-            0.5f * (1.0f + ctx.randF()));
+            0.5f * (1.0f + r[1]), 0.5f * (1.0f + r[2]), 0.5f * (1.0f + r[3]));
 
           world.push_back(std::make_unique<Sphere>(
             center, RADIUS, std::make_unique<MetalMaterial>(color, fuzz)));
@@ -630,6 +679,7 @@ generateImage(
     return image;
   }
 
+  float r[4];
   for (int j = startY; j < lastY; ++j)
   {
     for (int i = 0; i < imageWidth; ++i)
@@ -637,8 +687,9 @@ generateImage(
       Color color;
       for (int s = 0; s < numSamples; ++s)
       {
-        const float u = float(i + ctx.randF()) / imageWidth;
-        const float v = float(imageHeight - j + ctx.randF()) / imageHeight;
+        ctx.rand_sse(r);
+        const float u = float(i + r[0]) / imageWidth;
+        const float v = float(imageHeight - j + r[1]) / imageHeight;
         color += getColor(ctx, camera.getRay(u, v), world);
       }
       color /= SAMPLE_COUNT;
@@ -675,7 +726,7 @@ render(const int imageWidth, const int imageHeight, const int numSamples)
   };
   auto world = getTestScene();
 
-  const int NUM_THREADS = 16;
+  const int NUM_THREADS = 14;
   std::thread threads[NUM_THREADS];
   res.imageParts.resize(NUM_THREADS);
   const int renderHeight = imageHeight / NUM_THREADS;
