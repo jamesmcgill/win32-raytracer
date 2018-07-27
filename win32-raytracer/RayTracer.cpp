@@ -319,11 +319,8 @@ struct MetalMaterial : public IMaterial
     using DirectX::SimpleMath::Ray;
     using DirectX::SimpleMath::Vector3;
 
-    Vector3 normalisedDir = ray.direction;
-    normalisedDir.Normalize();
-    Vector3 reflectTo = reflect(normalisedDir, rec.normal);
-    Vector3 reflectDir
-      = reflectTo - rec.hitPoint + fuzz * getRandomPointInUnitSphere(ctx);
+    Vector3 reflectDir = reflect(ray.direction, rec.normal)
+                         + (fuzz * getRandomPointInUnitSphere(ctx));
     if (reflectDir.Dot(rec.normal) <= 0.0f)
     {
       return std::nullopt;
