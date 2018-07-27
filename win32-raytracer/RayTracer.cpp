@@ -10,7 +10,7 @@ __declspec(align(16)) static const __m128i INT_MAX_VEC_MM = _mm_load_si128(
 __declspec(align(16)) static const __m128 F_MAX_VEC_MM = _mm_cvtepi32_ps(
   INT_MAX_VEC_MM);
 
-namespace ray
+namespace ptr
 {
 //------------------------------------------------------------------------------
 class ThreadContext
@@ -477,7 +477,7 @@ getColor(
   using DirectX::SimpleMath::Ray;
   using DirectX::SimpleMath::Vector3;
 
-  if (recurseDepth > ray::MAX_RECURSION)
+  if (recurseDepth > ptr::MAX_RECURSION)
   {
     return Color();
   }

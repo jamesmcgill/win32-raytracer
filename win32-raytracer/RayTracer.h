@@ -3,7 +3,7 @@
 #include "pch.h"
 
 //------------------------------------------------------------------------------
-namespace ray
+namespace ptr
 {
 struct RenderResult
 {

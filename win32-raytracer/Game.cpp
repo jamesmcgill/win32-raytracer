@@ -24,7 +24,7 @@ using Microsoft::WRL::ComPtr;
 
 //------------------------------------------------------------------------------
 bool
-saveImage(const ray::Image& image, const std::wstring& fileName)
+saveImage(const ptr::Image& image, const std::wstring& fileName)
 {
   CHAR strFile[MAX_PATH];
   WideCharToMultiByte(
@@ -81,7 +81,7 @@ Game::Initialize(HWND window, int width, int height)
   // TODO: Fill optional settings of the io structure later.
   // TODO: Load fonts if you don't want to use the default font.
 
-  auto onRenderComplete = [this](const ray::RenderResult& result) {
+  auto onRenderComplete = [this](const ptr::RenderResult& result) {
     m_renderDuration = result.renderDuration;
 
     if (result.imageParts.empty())
@@ -92,8 +92,8 @@ Game::Initialize(HWND window, int width, int height)
     }
 
     // Stich image pieces together
-    ray::Image image;
-    image.width  = ray::IMAGE_WIDTH;
+    ptr::Image image;
+    image.width  = ptr::IMAGE_WIDTH;
     image.height = 0;
     for (const auto& i : result.imageParts)
     {
@@ -101,7 +101,7 @@ Game::Initialize(HWND window, int width, int height)
       image.height += i.height;
     }
 
-    if (!saveImage(image, ray::IMAGE_FILENAME))
+    if (!saveImage(image, ptr::IMAGE_FILENAME))
     {
       m_isError = true;
     }
@@ -111,8 +111,8 @@ Game::Initialize(HWND window, int width, int height)
 
   // Start Rendering
   m_isRendering  = true;
-  m_renderThread = ray::asyncRender(
-    ray::IMAGE_WIDTH, ray::IMAGE_HEIGHT, ray::NUM_SAMPLES, onRenderComplete);
+  m_renderThread = ptr::asyncRender(
+    ptr::IMAGE_WIDTH, ptr::IMAGE_HEIGHT, ptr::NUM_SAMPLES, onRenderComplete);
 }
 
 //------------------------------------------------------------------------------
@@ -166,7 +166,7 @@ Game::CreateTexture()
   ComPtr<ID3D11Resource> resource;
   DX::ThrowIfFailed(CreateWICTextureFromFile(
     m_deviceResources->GetD3DDevice(),
-    ray::IMAGE_FILENAME,
+    ptr::IMAGE_FILENAME,
     resource.GetAddressOf(),
     m_texture.ReleaseAndGetAddressOf()));
 
@@ -337,8 +337,8 @@ Game::GetDefaultSize(int& width, int& height) const
 {
   // TODO: Change to desired default window size (note minimum size is
   // 320x200).
-  width  = ray::IMAGE_WIDTH;
-  height = ray::IMAGE_HEIGHT;
+  width  = ptr::IMAGE_WIDTH;
+  height = ptr::IMAGE_HEIGHT;
 }
 #pragma endregion
 

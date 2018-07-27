@@ -153,7 +153,7 @@ ThrowIfFailed(HRESULT hr)
 //------------------------------------------------------------------------------
 using u8 = uint8_t;
 
-namespace ray
+namespace ptr
 {
 using Pixel       = std::array<u8, 3>;
 using ImageBuffer = std::vector<Pixel>;
