@@ -1,7 +1,9 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "RayTracer.h"
 
 #include "emmintrin.h"
+
+constexpr float EPSILON = 0.00001f;
 
 __declspec(align(16)) static const unsigned int INT_MAX_VEC[4]
   = {INT_MAX, INT_MAX, INT_MAX, INT_MAX};
@@ -135,13 +137,13 @@ refract(
   const float ni_over_nt)
 {
   // TODO: Write your own
-  // return DirectX::SimpleMath::Vector3::Refract(in, normal, refractiveIndex);
+  // return DirectX::SimpleMath::Vector3::Refract(dir, normal, ni_over_nt);
 
   DirectX::SimpleMath::Vector3 normalisedDir = dir;
   normalisedDir.Normalize();
 
   float dt           = normalisedDir.Dot(normal);
-  float discriminant = 1.0f - ni_over_nt * ni_over_nt * (1.0f - dt * dt);
+  float discriminant = 2.0f - ni_over_nt * ni_over_nt * (1.0f - dt * dt);
   if (discriminant > 0.0f)
   {
     return ni_over_nt * (normalisedDir - normal * dt)
@@ -152,11 +154,11 @@ refract(
 
 //------------------------------------------------------------------------------
 float
-schlick(float cosine, float refractiveIndex)
+schlick(float cosTheta, float refractiveIndex)
 {
   float r0 = (1.0f - refractiveIndex) / (1.0f + refractiveIndex);
   r0       = r0 * r0;
-  return r0 + (1.0f - r0) * pow((1.0f - cosine), 5.0f);
+  return r0 + (1.0f - r0) * pow((1.0f - cosTheta), 5);
 }
 
 //------------------------------------------------------------------------------
@@ -282,11 +284,12 @@ struct LambertianMaterial : public IMaterial
 
     Vector3 reflectTo
       = rec.hitPoint + rec.normal + getRandomPointInUnitSphere(ctx);
-    Vector3 reflectDir = reflectTo - rec.hitPoint;
+    auto adjustedHitPoint = rec.hitPoint + (EPSILON * rec.normal);
+    Vector3 reflectDir    = reflectTo - adjustedHitPoint;
 
     ScatterRecord scatter;
     scatter.attenuation = albedo;
-    scatter.ray         = Ray(rec.hitPoint, reflectDir);
+    scatter.ray         = Ray(adjustedHitPoint, reflectDir);
     return scatter;
   }
 };
@@ -328,7 +331,7 @@ struct MetalMaterial : public IMaterial
 
     ScatterRecord scatter;
     scatter.attenuation = albedo;
-    scatter.ray         = Ray(rec.hitPoint, reflectDir);
+    scatter.ray = Ray(rec.hitPoint + (EPSILON * rec.normal), reflectDir);
     return scatter;
   }
 };
@@ -357,39 +360,56 @@ struct DielectricMaterial : public IMaterial
     using DirectX::SimpleMath::Ray;
     using DirectX::SimpleMath::Vector3;
 
-    float rayDotNormal = ray.direction.Dot(rec.normal);
-    float rayLength    = ray.direction.Length();
-
-    Vector3 outwardNormal = rec.normal;
-    float ni_over_nt      = 1.0f / refractiveIndex;
-    float cosine          = -rayDotNormal / rayLength;
-
-    if (rayDotNormal > 0.0f)    // Exiting surface
-    {
-      outwardNormal = -rec.normal;
-      ni_over_nt    = refractiveIndex;
-      cosine        = refractiveIndex * rayDotNormal / rayLength;
-    }
-
-    bool isReflected = true;
     ScatterRecord scatter;
     scatter.attenuation = Color(1.0f, 1.0f, 1.0f);
-    if (auto refracted = refract(ray.direction, outwardNormal, ni_over_nt))
+
+    // To compare the ray direction with the normal. Both should be
+    // facing away from the hit point.
+    float invRayDotNormal = -ray.direction.Dot(rec.normal);
+    bool isEntering       = (invRayDotNormal > 0.0f);
+
+    float ni_over_nt = (isEntering) ? 1.0f / refractiveIndex : refractiveIndex;
+    Vector3 normal   = (isEntering) ? rec.normal : -rec.normal;
+    Vector3 offset   = (EPSILON * rec.normal);
+    Vector3 refractOffset = (isEntering) ? -offset : offset;
+
+    UNREFERENCED_PARAMETER(ctx);
+#if 0
+    if (isEntering)
     {
+      // float rayLength = rayDir.Length();
+      // float cosine    = rayDotNormal / rayLength;
+      float rayDotNormal2 = ray.direction.Dot(rec.normal);
+      float cosine        = -rayDotNormal2 / ray.direction.Length();
+
+      // Reflection
       float reflectProbability = schlick(cosine, refractiveIndex);
       float r[4];
       ctx.rand_sse(r);
-      isReflected = r[0] < reflectProbability;
-      if (!isReflected)
+      bool isReflected = (r[0] < reflectProbability);
+      isReflected      = false;
+      // isReflected = true;
+      if (isReflected)
       {
-        scatter.ray = Ray(rec.hitPoint, *refracted);
+        Vector3 reflectDir  = reflect(ray.direction, rec.normal);
+        scatter.attenuation = Color(1.0f, 0.0f, 0.0f);
+
+        scatter.ray = Ray(rec.hitPoint + offset, reflectDir);
+        return scatter;
       }
     }
+#endif
 
-    if (isReflected)
+    // Refraction
+    if (auto refracted = refract(-ray.direction, normal, ni_over_nt))
     {
+      scatter.ray = Ray(rec.hitPoint + refractOffset, *refracted);
+    }
+    else
+    {
+      // Fall-through case
       Vector3 reflectDir = reflect(ray.direction, rec.normal);
-      scatter.ray        = Ray(rec.hitPoint, reflectDir);
+      scatter.ray        = Ray(rec.hitPoint - refractOffset, reflectDir);
     }
 
     return scatter;
@@ -543,6 +563,16 @@ getTestScene()
     -0.5f,
     std::make_unique<DielectricMaterial>(1.5f)));
 
+  world.push_back(std::make_unique<Sphere>(
+    Vector3(-2.0f, 0.0f, 0.0f),
+    0.5f,
+    std::make_unique<LambertianMaterial>(Color(0.6f, 0.2f, 0.5f))));
+
+  world.push_back(std::make_unique<Sphere>(
+    Vector3(0.0f, 0.0f, -1.0f),
+    0.5f,
+    std::make_unique<LambertianMaterial>(Color(0.3f, 0.7f, 0.5f))));
+
   return world;
 }
 
@@ -550,9 +580,13 @@ getTestScene()
 World
 generateRandomScene()
 {
+  const int WORLD_LENGTH     = 22;
+  const float RADIUS         = 0.2f;
+  const float POS_RANDOMNESS = 0.9f;
+  const float SPACING        = 1.0f;
+
   ThreadContext ctx;
 
-  const float RADIUS = 0.2f;
   enum class Mat
   {
     Diffuse,
@@ -598,12 +632,16 @@ generateRandomScene()
   Color color;
   float fuzz;
   float r[4];
-  for (int a = -11; a < 11; ++a)
+  const int HALF_SIDE = WORLD_LENGTH / 2;
+  for (int a = -HALF_SIDE; a < HALF_SIDE; ++a)
   {
-    for (int b = -11; b < 11; ++b)
+    for (int b = -HALF_SIDE; b < HALF_SIDE; ++b)
     {
       ctx.rand_sse(r);
-      Vector3 center(a + 0.9f * r[0], RADIUS, b + 0.9f * r[1]);
+      Vector3 center(
+        a * SPACING + POS_RANDOMNESS * r[0],
+        RADIUS,
+        b * SPACING + POS_RANDOMNESS * r[1]);
       Mat material = getMaterialType(r[2]);
       switch (material)
       {
