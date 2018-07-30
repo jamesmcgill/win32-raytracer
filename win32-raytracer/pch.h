@@ -167,7 +167,8 @@ struct Image
 constexpr size_t IMAGE_WIDTH  = 800;
 constexpr size_t IMAGE_HEIGHT = 600;
 constexpr int NUM_SAMPLES     = 100;
-constexpr int MAX_RECURSION   = 50;
+constexpr int MAX_RECURSION   = 10;
+constexpr int NUM_THREADS     = 14;
 
 static const wchar_t* IMAGE_FILENAME = L"out.bmp";
 };

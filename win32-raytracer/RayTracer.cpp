@@ -12,6 +12,12 @@ __declspec(align(16)) static const __m128i INT_MAX_VEC_MM = _mm_load_si128(
 __declspec(align(16)) static const __m128 F_MAX_VEC_MM = _mm_cvtepi32_ps(
   INT_MAX_VEC_MM);
 
+__declspec(align(16)) static const float VEC_UNIT[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+__declspec(align(16)) static const __m128 VEC_UNIT_MM = _mm_load_ps(VEC_UNIT);
+
+__declspec(align(16)) static const float VEC_HALF[4] = {0.5f, 0.5f, 0.5f, 0.5f};
+__declspec(align(16)) static const __m128 VEC_HALF_MM = _mm_load_ps(VEC_HALF);
+
 namespace ptr
 {
 //------------------------------------------------------------------------------
@@ -54,7 +60,10 @@ public:
     // CUSTOM CODE for returning floats in range [0 -> 1)
     __declspec(align(16)) __m128 realConversion;
     realConversion = _mm_cvtepi32_ps(cur_seed);
+
     realConversion = _mm_div_ps(realConversion, F_MAX_VEC_MM);
+    realConversion = _mm_add_ps(realConversion, VEC_UNIT_MM);
+    realConversion = _mm_mul_ps(realConversion, VEC_HALF_MM);
     _mm_store_ps(result, realConversion);
 
     return;
@@ -365,50 +374,39 @@ struct DielectricMaterial : public IMaterial
 
     // To compare the ray direction with the normal. Both should be
     // facing away from the hit point.
-    float invRayDotNormal = -ray.direction.Dot(rec.normal);
+    Vector3 dirToLight = -ray.direction;
+    dirToLight.Normalize();
+    float invRayDotNormal = dirToLight.Dot(rec.normal);
     bool isEntering       = (invRayDotNormal > 0.0f);
 
     float ni_over_nt = (isEntering) ? 1.0f / refractiveIndex : refractiveIndex;
-    Vector3 normal   = (isEntering) ? rec.normal : -rec.normal;
-    Vector3 offset   = (EPSILON * rec.normal);
-    Vector3 refractOffset = (isEntering) ? -offset : offset;
+    Vector3 rayFacingNormal = (isEntering) ? rec.normal : -rec.normal;
+    Vector3 offset          = (EPSILON * rec.normal);
+    Vector3 refractOffset   = (isEntering) ? -offset : offset;
 
-    UNREFERENCED_PARAMETER(ctx);
-#if 0
-    if (isEntering)
+    // Reflection
+    float cosine             = dirToLight.Dot(rayFacingNormal);
+    float reflectProbability = schlick(cosine, ni_over_nt);
+    float r[4];
+    ctx.rand_sse(r);
+    constexpr float REFLECT_THRES = 0.05f;
+    bool isReflected              = (REFLECT_THRES + r[0] < reflectProbability);
+    if (isReflected)
     {
-      // float rayLength = rayDir.Length();
-      // float cosine    = rayDotNormal / rayLength;
-      float rayDotNormal2 = ray.direction.Dot(rec.normal);
-      float cosine        = -rayDotNormal2 / ray.direction.Length();
-
-      // Reflection
-      float reflectProbability = schlick(cosine, refractiveIndex);
-      float r[4];
-      ctx.rand_sse(r);
-      bool isReflected = (r[0] < reflectProbability);
-      isReflected      = false;
-      // isReflected = true;
-      if (isReflected)
-      {
-        Vector3 reflectDir  = reflect(ray.direction, rec.normal);
-        scatter.attenuation = Color(1.0f, 0.0f, 0.0f);
-
-        scatter.ray = Ray(rec.hitPoint + offset, reflectDir);
-        return scatter;
-      }
+      Vector3 reflectDir = reflect(ray.direction, rec.normal);
+      scatter.ray        = Ray(rec.hitPoint - refractOffset, reflectDir);
+      return scatter;
     }
-#endif
 
     // Refraction
-    if (auto refracted = refract(-ray.direction, normal, ni_over_nt))
+    if (auto refracted = refract(-ray.direction, rayFacingNormal, ni_over_nt))
     {
       scatter.ray = Ray(rec.hitPoint + refractOffset, *refracted);
     }
     else
     {
       // Fall-through case
-      Vector3 reflectDir = reflect(ray.direction, rec.normal);
+      Vector3 reflectDir = reflect(ray.direction, rayFacingNormal);
       scatter.ray        = Ray(rec.hitPoint - refractOffset, reflectDir);
     }
 
@@ -687,8 +685,8 @@ generateImage(
   ThreadContext ctx;
 
   using DirectX::SimpleMath::Vector3;
-  const auto lookFrom     = Vector3(5.0f, 1.0f, 4.0f);
-  const auto lookTo       = Vector3(0.0f, 0.0f, 0.0f);
+  const auto lookFrom     = Vector3(15.0f, 2.0f, 4.0f);
+  const auto lookTo       = Vector3(0.0f, 1.0f, 0.0f);
   const auto upDir        = Vector3(0.0f, 1.0f, 0.0f);
   const float fov         = 20.0f;
   const float aspectRatio = static_cast<float>(imageWidth) / imageHeight;
@@ -759,18 +757,17 @@ render(const int imageWidth, const int imageHeight, const int numSamples)
       [](const auto& p) { return p->clone(); });
     return newWorld;
   };
-  auto world = getTestScene();
+  auto world = generateRandomScene();
 
-  const int NUM_THREADS = 14;
-  std::thread threads[NUM_THREADS];
-  res.imageParts.resize(NUM_THREADS);
-  const int renderHeight = imageHeight / NUM_THREADS;
+  std::thread threads[ptr::NUM_THREADS];
+  res.imageParts.resize(ptr::NUM_THREADS);
+  const int renderHeight = imageHeight / ptr::NUM_THREADS;
 
   int startY = 0;
   int endY   = 0;
-  for (int i = 0; i < NUM_THREADS; ++i)
+  for (int i = 0; i < ptr::NUM_THREADS; ++i)
   {
-    endY = (i == NUM_THREADS - 1) ? imageHeight : (endY + renderHeight);
+    endY = (i == ptr::NUM_THREADS - 1) ? imageHeight : (endY + renderHeight);
 
     auto newWorld = cloneWorld(world);
     threads[i]    = std::thread([=, &res, w{std::move(newWorld)}]() {
