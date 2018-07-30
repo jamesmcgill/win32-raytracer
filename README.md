@@ -2,11 +2,11 @@
 <img src="1stWeekendOutput.jpg" width="457px"></img>
 
 
-My implementation from Peter Shirley's Ray Tracing in one Weekend book:
+My implementation from Peter Shirley's Ray Tracing in one Weekend book:  
 http://in1weekend.blogspot.com/2016/01/ray-tracing-in-one-weekend.html
 
 
-Simple UI using dear imgui (using DirectX 11 backend)
+Simple UI using dear imgui (using DirectX 11 backend)  
 https://github.com/ocornut/imgui
 
 ## Features:
