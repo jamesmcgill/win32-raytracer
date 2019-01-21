@@ -166,11 +166,11 @@ struct Image
   ImageBuffer buffer;
 };
 
-constexpr int DEFAULT_IMAGE_WIDTH  = 800;
-constexpr int DEFAULT_IMAGE_HEIGHT = 600;
-constexpr int DEFAULT_NUM_SAMPLES  = 100;
+constexpr int DEFAULT_IMAGE_WIDTH  = 640;
+constexpr int DEFAULT_IMAGE_HEIGHT = 480;
+constexpr int DEFAULT_NUM_SAMPLES  = 50;
 constexpr int MAX_RECURSION        = 10;
-constexpr int DEFAULT_NUM_THREADS  = 14;
+constexpr int DEFAULT_NUM_THREADS  = 3;
 
 extern int IMAGE_WIDTH;
 extern int IMAGE_HEIGHT;
