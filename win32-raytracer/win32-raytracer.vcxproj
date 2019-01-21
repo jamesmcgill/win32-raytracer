@@ -96,7 +96,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <TreatWarningAsError>true</TreatWarningAsError>
       <BufferSecurityCheck>false</BufferSecurityCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)\DirectXTK-jul2018\Inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\DirectXTK-nov2018\Inc</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -116,7 +116,7 @@
       <ConformanceMode>true</ConformanceMode>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)\DirectXTK-jul2018\Inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\DirectXTK-nov2018\Inc</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -139,7 +139,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <TreatWarningAsError>true</TreatWarningAsError>
       <BufferSecurityCheck>false</BufferSecurityCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)\DirectXTK-jul2018\Inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\DirectXTK-nov2018\Inc</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -164,7 +164,7 @@
       <ConformanceMode>true</ConformanceMode>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)\DirectXTK-jul2018\Inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\DirectXTK-nov2018\Inc</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -217,7 +217,7 @@
     <Manifest Include="settings.manifest" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\DirectXTK-jul2018\DirectXTK_Desktop_2017.vcxproj">
+    <ProjectReference Include="..\DirectXTK-nov2018\DirectXTK_Desktop_2017.vcxproj">
       <Project>{e0b52ae7-e160-4d32-bf3f-910b785e5a8e}</Project>
     </ProjectReference>
   </ItemGroup>
