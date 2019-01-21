@@ -54,6 +54,8 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
+#include <inttypes.h>
 
 #include <wrl/client.h>
 
@@ -148,7 +150,7 @@ ThrowIfFailed(HRESULT hr)
     throw com_exception(hr);
   }
 }
-}
+}    // namespace DX
 
 //------------------------------------------------------------------------------
 using u8 = uint8_t;
@@ -164,12 +166,17 @@ struct Image
   ImageBuffer buffer;
 };
 
-constexpr size_t IMAGE_WIDTH  = 800;
-constexpr size_t IMAGE_HEIGHT = 600;
-constexpr int NUM_SAMPLES     = 100;
-constexpr int MAX_RECURSION   = 10;
-constexpr int NUM_THREADS     = 14;
+constexpr int DEFAULT_IMAGE_WIDTH  = 800;
+constexpr int DEFAULT_IMAGE_HEIGHT = 600;
+constexpr int DEFAULT_NUM_SAMPLES  = 100;
+constexpr int MAX_RECURSION        = 10;
+constexpr int DEFAULT_NUM_THREADS  = 14;
+
+extern int IMAGE_WIDTH;
+extern int IMAGE_HEIGHT;
+extern int NUM_SAMPLES;
+extern int NUM_THREADS;
 
 static const wchar_t* IMAGE_FILENAME = L"out.bmp";
-};
+};    // namespace ptr
 //------------------------------------------------------------------------------

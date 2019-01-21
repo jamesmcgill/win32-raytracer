@@ -22,6 +22,11 @@ __declspec(dllexport) DWORD NvOptimusEnablement                = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
+int ptr::IMAGE_WIDTH = ptr::DEFAULT_IMAGE_WIDTH;
+int ptr::IMAGE_HEIGHT = ptr::DEFAULT_IMAGE_HEIGHT;
+int ptr::NUM_SAMPLES  = ptr::DEFAULT_NUM_SAMPLES;
+int ptr::NUM_THREADS  = ptr::DEFAULT_NUM_THREADS;
+
 //------------------------------------------------------------------------------
 // Entry point
 //------------------------------------------------------------------------------
@@ -63,15 +68,55 @@ wWinMain(
     if (!RegisterClassEx(&wcex))
       return 1;
 
-    // Create window
-    int w, h;
-    g_game->GetDefaultSize(w, h);
 
+    // Parse Command Line (width, height, samples, num threads)
+    int nArgs;
+    LPWSTR* szArglist = CommandLineToArgvW(GetCommandLineW(), &nArgs);
+    if (NULL != szArglist)
+    {
+      int value;
+      if (nArgs > 2)
+      {
+         value = _wtoi(szArglist[1]);
+        if (value != 0 && value != INT_MAX && value != INT_MIN)
+        {
+          ptr::IMAGE_WIDTH = value;
+        }
+
+        value = _wtoi(szArglist[2]);
+        if (value != 0 && value != INT_MAX && value != INT_MIN)
+        {
+          ptr::IMAGE_HEIGHT = value;
+        }
+      }
+
+      if (nArgs > 3)
+      {
+        value = _wtoi(szArglist[3]);
+        if (value != 0 && value != INT_MAX && value != INT_MIN)
+        {
+          ptr::NUM_SAMPLES = value;
+        }
+      }
+
+      if (nArgs > 4)
+      {
+        value = _wtoi(szArglist[4]);
+        if (value != 0 && value != INT_MAX && value != INT_MIN)
+        {
+          ptr::NUM_THREADS = value;
+        }
+      }
+
+    }
+    LocalFree(szArglist);
+
+  // Create window
     RECT rc;
     rc.top    = 0;
     rc.left   = 0;
-    rc.right  = static_cast<LONG>(w);
-    rc.bottom = static_cast<LONG>(h);
+    rc.right  = static_cast<LONG>(ptr::IMAGE_WIDTH);
+    rc.bottom = static_cast<LONG>(ptr::IMAGE_HEIGHT);
 
     AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 
@@ -265,12 +310,6 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
           SetWindowLongPtr(hWnd, GWL_STYLE, WS_OVERLAPPEDWINDOW);
           SetWindowLongPtr(hWnd, GWL_EXSTYLE, 0);
-
-          int width  = 800;
-          int height = 600;
-          if (game)
-            game->GetDefaultSize(width, height);
-
           ShowWindow(hWnd, SW_SHOWNORMAL);
 
           SetWindowPos(
@@ -278,8 +317,8 @@ WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             HWND_TOP,
             0,
             0,
-            width,
-            height,
+            ptr::IMAGE_WIDTH,
+            ptr::IMAGE_HEIGHT,
             SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
         }
         else

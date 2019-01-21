@@ -328,18 +328,6 @@ Game::OnWindowSizeChanged(int width, int height)
 
   CreateWindowSizeDependentResources();
 }
-
-//------------------------------------------------------------------------------
-// Properties
-//------------------------------------------------------------------------------
-void
-Game::GetDefaultSize(int& width, int& height) const
-{
-  // TODO: Change to desired default window size (note minimum size is
-  // 320x200).
-  width  = ptr::IMAGE_WIDTH;
-  height = ptr::IMAGE_HEIGHT;
-}
 #pragma endregion
 
 #pragma region Direct3D Resources

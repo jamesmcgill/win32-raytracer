@@ -759,7 +759,7 @@ render(const int imageWidth, const int imageHeight, const int numSamples)
   };
   auto world = generateRandomScene();
 
-  std::thread threads[ptr::NUM_THREADS];
+  std::vector<std::thread> threads(ptr::NUM_THREADS);
   res.imageParts.resize(ptr::NUM_THREADS);
   const int renderHeight = imageHeight / ptr::NUM_THREADS;
 
@@ -770,10 +770,10 @@ render(const int imageWidth, const int imageHeight, const int numSamples)
     endY = (i == ptr::NUM_THREADS - 1) ? imageHeight : (endY + renderHeight);
 
     auto newWorld = cloneWorld(world);
-    threads[i]    = std::thread([=, &res, w{std::move(newWorld)}]() {
+    threads[i]    = std::move(std::thread([=, &res, w{std::move(newWorld)}]() {
       res.imageParts[i] = std::move(
         generateImage(w, imageWidth, imageHeight, startY, endY, numSamples));
-    });
+    }));
 
     startY = endY;
   }

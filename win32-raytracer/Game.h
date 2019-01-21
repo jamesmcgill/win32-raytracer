@@ -37,9 +37,6 @@ public:
   void OnWindowMoved();
   void OnWindowSizeChanged(int width, int height);
 
-  // Properties
-  void GetDefaultSize(int& width, int& height) const;
-
 private:
   bool CreateTexture();
 
