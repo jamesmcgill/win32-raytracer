@@ -172,10 +172,12 @@ constexpr int DEFAULT_NUM_SAMPLES  = 50;
 constexpr int MAX_RECURSION        = 10;
 constexpr int DEFAULT_NUM_THREADS  = 3;
 
+// Constant after initialisation
 extern int IMAGE_WIDTH;
 extern int IMAGE_HEIGHT;
 extern int NUM_SAMPLES;
 extern int NUM_THREADS;
+extern bool IS_PERF_TEST;
 
 static const wchar_t* IMAGE_FILENAME = L"out.bmp";
 };    // namespace ptr

@@ -17,15 +17,17 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
   HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 // Indicates to hybrid graphics systems to prefer the discrete part by default
-extern "C" {
-__declspec(dllexport) DWORD NvOptimusEnablement                = 0x00000001;
-__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+extern "C"
+{
+  __declspec(dllexport) DWORD NvOptimusEnablement                = 0x00000001;
+  __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
-int ptr::IMAGE_WIDTH = ptr::DEFAULT_IMAGE_WIDTH;
-int ptr::IMAGE_HEIGHT = ptr::DEFAULT_IMAGE_HEIGHT;
-int ptr::NUM_SAMPLES  = ptr::DEFAULT_NUM_SAMPLES;
-int ptr::NUM_THREADS  = ptr::DEFAULT_NUM_THREADS;
+int ptr::IMAGE_WIDTH   = ptr::DEFAULT_IMAGE_WIDTH;
+int ptr::IMAGE_HEIGHT  = ptr::DEFAULT_IMAGE_HEIGHT;
+int ptr::NUM_SAMPLES   = ptr::DEFAULT_NUM_SAMPLES;
+int ptr::NUM_THREADS   = ptr::DEFAULT_NUM_THREADS;
+bool ptr::IS_PERF_TEST = false;
 
 //------------------------------------------------------------------------------
 // Entry point
@@ -68,7 +70,6 @@ wWinMain(
     if (!RegisterClassEx(&wcex))
       return 1;
 
-
     // Parse Command Line (width, height, samples, num threads)
     int nArgs;
     LPWSTR* szArglist = CommandLineToArgvW(GetCommandLineW(), &nArgs);
@@ -77,7 +78,7 @@ wWinMain(
       int value;
       if (nArgs > 2)
       {
-         value = _wtoi(szArglist[1]);
+        value = _wtoi(szArglist[1]);
         if (value != 0 && value != INT_MAX && value != INT_MIN)
         {
           ptr::IMAGE_WIDTH = value;
@@ -108,10 +109,17 @@ wWinMain(
         }
       }
 
+      if (nArgs > 5)
+      {
+        if (wcscmp(szArglist[5], L"perfTest") == 0)
+        {
+          ptr::IS_PERF_TEST = true;
+        }
+      }
     }
     LocalFree(szArglist);
 
-  // Create window
+    // Create window
     RECT rc;
     rc.top    = 0;
     rc.left   = 0;

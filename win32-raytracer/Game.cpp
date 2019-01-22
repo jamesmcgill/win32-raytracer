@@ -183,6 +183,14 @@ Game::CreateTexture()
 }
 
 //------------------------------------------------------------------------------
+void
+write_perf_results(uint64_t durationMs)
+{
+  std::ofstream file("perf.txt");
+  file << durationMs;
+}
+
+//------------------------------------------------------------------------------
 // Draws the scene.
 //------------------------------------------------------------------------------
 void
@@ -211,6 +219,14 @@ Game::Render()
   }
   else
   {
+    auto duration = m_renderDuration.load();
+    if (ptr::IS_PERF_TEST)
+    {
+      write_perf_results(duration.count());
+      ExitGame();
+      return;
+    }
+
     if (m_isError)
     {
       ImGui::Text("Error saving file!");
@@ -231,7 +247,7 @@ Game::Render()
       m_spriteBatch->End();
     }
 
-    ImGui::Text("Render duration: %ld ms", m_renderDuration.load());
+    ImGui::Text("Render duration: %ld ms", duration);
   }
 
   // auto context = m_deviceResources->GetD3DDeviceContext();
