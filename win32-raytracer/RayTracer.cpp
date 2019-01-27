@@ -397,22 +397,6 @@ getColor(
     const __m128 twoA             = _mm_mul_ps(a, twos);
     __m128 t                      = _mm_div_ps(bNegMinusDiscrim, twoA);
 
-    // hitPoint  = ray.position + (t * ray.direction);
-    __m128 hitPointX = _mm_mul_ps(t, rayDirX);
-    __m128 hitPointY = _mm_mul_ps(t, rayDirY);
-    __m128 hitPointZ = _mm_mul_ps(t, rayDirZ);
-    hitPointX        = _mm_add_ps(hitPointX, rayPosX);
-    hitPointY        = _mm_add_ps(hitPointY, rayPosY);
-    hitPointZ        = _mm_add_ps(hitPointZ, rayPosZ);
-
-    // normal    = (ret.hitPoint - center) / radius;
-    __m128 normalX = _mm_sub_ps(hitPointX, posX);
-    __m128 normalY = _mm_sub_ps(hitPointY, posY);
-    __m128 normalZ = _mm_sub_ps(hitPointZ, posZ);
-    normalX        = _mm_div_ps(normalX, radius);
-    normalY        = _mm_div_ps(normalY, radius);
-    normalZ        = _mm_div_ps(normalZ, radius);
-
     // Filter out individual register results
     //---------------------------------------
     // 1) if (discriminant < 0.0f)
@@ -440,7 +424,29 @@ getColor(
     const __m128 isTBelowMax   = _mm_cmplt_ps(t, curTs);
     const __m128 isTInRange    = _mm_and_ps(isTAboveMin, isTBelowMax);
     const __m128 isNewNearestT = _mm_and_ps(isDiscrimInRange, isTInRange);
-    curIsHit                   = _mm_or_ps(isNewNearestT, curIsHit);
+    int isAnyTNew              = _mm_movemask_ps(isNewNearestT);
+    if (isAnyTNew == 0)
+    {
+      continue;    // Early out, if no register has an interesting t
+    }
+
+    curIsHit = _mm_or_ps(isNewNearestT, curIsHit);
+
+    // hitPoint  = ray.position + (t * ray.direction);
+    __m128 hitPointX = _mm_mul_ps(t, rayDirX);
+    __m128 hitPointY = _mm_mul_ps(t, rayDirY);
+    __m128 hitPointZ = _mm_mul_ps(t, rayDirZ);
+    hitPointX        = _mm_add_ps(hitPointX, rayPosX);
+    hitPointY        = _mm_add_ps(hitPointY, rayPosY);
+    hitPointZ        = _mm_add_ps(hitPointZ, rayPosZ);
+
+    // normal    = (ret.hitPoint - center) / radius;
+    __m128 normalX = _mm_sub_ps(hitPointX, posX);
+    __m128 normalY = _mm_sub_ps(hitPointY, posY);
+    __m128 normalZ = _mm_sub_ps(hitPointZ, posZ);
+    normalX        = _mm_div_ps(normalX, radius);
+    normalY        = _mm_div_ps(normalY, radius);
+    normalZ        = _mm_div_ps(normalZ, radius);
 
     // Update the currentTs in 3 steps
     // 1) Zero out values in currentTs, that are to be updated with new values
@@ -618,8 +624,11 @@ getColor(
     Vector3 unit_direction = ray.direction;
     unit_direction.Normalize();
     float t = quantize(unit_direction.y);
-    return ((1.0f - t) * Color(1.0f, 1.0f, 1.0f))
-           + (t * Color(0.5f, 0.7f, 1.0f));
+
+    static Color white(1.0f, 1.0f, 1.0f);
+    static Color tint(0.5f, 0.7f, 1.0f);
+
+    return ((1.0f - t) * white) + (t * tint);
   }
 
   return Color();
