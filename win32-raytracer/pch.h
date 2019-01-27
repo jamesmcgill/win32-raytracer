@@ -85,6 +85,7 @@
 #include <atomic>
 #include <chrono>
 #include <optional>
+#include <variant>
 #include <limits>
 #include <stdio.h>
 #include <random>
