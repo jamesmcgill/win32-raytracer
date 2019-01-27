@@ -266,6 +266,8 @@ Game::Render()
 
   // Show the new frame.
   m_deviceResources->Present();
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
 }
 
 //------------------------------------------------------------------------------
