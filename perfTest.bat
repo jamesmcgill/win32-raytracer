@@ -6,8 +6,11 @@ set BUILD_CMD=msbuild win32-raytracer.sln -maxcpucount /p:Configuration=Release 
 set PERF_FILE=perf.txt
 set EXEC_PATH=x64\Release
 
+del prevPerf.txt
+del currPerf.txt
+
 :: Test the previous build
-git stash
+git stash push win32-raytracer
 %BUILD_CMD%
 pushd %EXEC_PATH%
 %RUN_CMD%
