@@ -12,5 +12,6 @@ https://github.com/ocornut/imgui
 ## Features:
 + Diffuse (lambertian), metal, glass (dielectric) materials
 + Antialiasing, depth of field
++ SIMD ray intersection tests
 + SIMD random number generator
 + Multi-threaded rendering
