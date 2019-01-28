@@ -823,7 +823,7 @@ generateImage(
   const int imageWidth,
   const int imageHeight,
   const int startY,
-  const int lastY,
+  const int endY,
   const int numSamples)
 {
   ThreadContext ctx;
@@ -848,7 +848,7 @@ generateImage(
 
   Image image;
   image.width  = imageWidth;
-  image.height = lastY - startY;
+  image.height = endY - startY;
   image.buffer.resize(image.width * image.height);
 
   if (world.empty())
@@ -857,16 +857,16 @@ generateImage(
   }
 
   float r[4];
-  for (int j = startY; j < lastY; ++j)
+  for (int y = startY; y < endY; ++y)
   {
-    for (int i = 0; i < imageWidth; ++i)
+    for (int x = 0; x < imageWidth; ++x)
     {
       Color color;
       for (int s = 0; s < numSamples; ++s)
       {
         ctx.rand_sse(r);
-        const float u = float(i + r[0]) / imageWidth;
-        const float v = float(imageHeight - j + r[1]) / imageHeight;
+        const float u = float(x + r[0]) / imageWidth;
+        const float v = float(imageHeight - y + r[1]) / imageHeight;
         color += getColor(ctx, camera.getRay(u, v), world);
       }
       color /= SAMPLE_COUNT;
@@ -874,14 +874,15 @@ generateImage(
       // Gamma Correction
       color = Color(sqrt(color.R()), sqrt(color.G()), sqrt(color.B()));
 
-      auto& dest = image.buffer[(j - startY) * imageWidth + i];
+      auto& dest = image.buffer[(y - startY) * imageWidth + x];
       dest[0]    = u8(255.99f * color.R());
       dest[1]    = u8(255.99f * color.G());
       dest[2]    = u8(255.99f * color.B());
     }
   }
+
   return image;
-}
+}    // namespace ptr
 
 //------------------------------------------------------------------------------
 RenderResult
@@ -893,22 +894,34 @@ render(const int imageWidth, const int imageHeight, const int numSamples)
 
   auto world = generateRandomScene();
 
-  std::vector<std::thread> threads(ptr::NUM_THREADS);
-  res.imageParts.resize(ptr::NUM_THREADS);
-  const int renderHeight = imageHeight / ptr::NUM_THREADS;
+  std::vector<std::thread> threads(NUM_THREADS);
 
-  int startY = 0;
-  int endY   = 0;
-  for (int i = 0; i < ptr::NUM_THREADS; ++i)
+  // Interleave work done on threads, i.e all threads should work on small
+  // sections of the same areas of the image. Rather than one thread working
+  // on the top of the image (usually simple and completed early),
+  // and one thread working on the bottom of the image (usually complex).
+  // This balances more the work across threads and prevents one thread left
+  // working alone, while the others are finished and doing nothing to help.
+  const int blockSizeY  = 8;
+  const int strideSizeY = NUM_THREADS * blockSizeY;
+  const size_t numBlocks = (size_t)(ceilf(imageHeight / (float)blockSizeY));
+  res.imageParts.resize(numBlocks);
+
+  for (int i = 0; i < NUM_THREADS; ++i)
   {
-    endY = (i == ptr::NUM_THREADS - 1) ? imageHeight : (endY + renderHeight);
-
     threads[i] = std::move(std::thread([=, &res]() {
-      res.imageParts[i] = std::move(generateImage(
-        world, imageWidth, imageHeight, startY, endY, numSamples));
-    }));
+      int imageSlot          = i;
+      const int threadStartY = blockSizeY * i;
+      for (int y = threadStartY; y < imageHeight; y += strideSizeY)
+      {
+        const int endY
+          = ((y + blockSizeY) < imageHeight) ? (y + blockSizeY) : imageHeight;
 
-    startY = endY;
+        res.imageParts[imageSlot] = std::move(
+          generateImage(world, imageWidth, imageHeight, y, endY, numSamples));
+        imageSlot += NUM_THREADS;
+      }
+    }));
   }
 
   for (int i = 0; i < NUM_THREADS; ++i)
