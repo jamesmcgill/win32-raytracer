@@ -171,7 +171,7 @@ constexpr int DEFAULT_IMAGE_WIDTH  = 640;
 constexpr int DEFAULT_IMAGE_HEIGHT = 480;
 constexpr int DEFAULT_NUM_SAMPLES  = 50;
 constexpr int MAX_RECURSION        = 10;
-constexpr int DEFAULT_NUM_THREADS  = 3;
+constexpr int DEFAULT_NUM_THREADS  = 4;
 
 // Constant after initialisation
 extern int IMAGE_WIDTH;
