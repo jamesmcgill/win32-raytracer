@@ -67,6 +67,29 @@ private:
 };
 
 //------------------------------------------------------------------------------
+struct Ray
+{
+  using Vector3 = DirectX::SimpleMath::Vector3;
+
+  Vector3 position;
+  Vector3 direction;
+  float shutterTime = 0.f;
+
+  Ray() noexcept
+      : position(0, 0, 0)
+      , direction(0, 0, 1)
+      , shutterTime(0.f)
+  {
+  }
+  Ray(Vector3 pos, Vector3 dir, float time)
+      : position(pos)
+      , direction(dir)
+      , shutterTime(time)
+  {
+  }
+};
+
+//------------------------------------------------------------------------------
 enum class Material
 {
   Lambertian,
@@ -107,7 +130,7 @@ struct HitRecord
 struct ScatterRecord
 {
   DirectX::SimpleMath::Color attenuation;
-  DirectX::SimpleMath::Ray ray;
+  ptr::Ray ray;
 };
 
 //------------------------------------------------------------------------------
@@ -206,7 +229,9 @@ struct Camera
   Vector3 vRightAxis;
   Vector3 vUpAxis;
 
-  float lensRadius = 1.0f;
+  float lensRadius    = 1.0f;
+  float shutterOpenT  = 0.0f;
+  float shutterCloseT = 0.05f;
   ThreadContext& ctx;
 
   Camera(
@@ -217,8 +242,12 @@ struct Camera
     float verticalFovInDegrees,
     float aspectRatio,
     float aperture,
-    float focusDist)
-      : ctx(_ctx)
+    float focusDist,
+    float shutOpenT  = 0.0f,
+    float shutCloseT = 0.05f)
+      : shutterOpenT(shutOpenT)
+      , shutterCloseT(shutCloseT)
+      , ctx(_ctx)
   {
     lensRadius             = aperture / 2.0f;
     const float theta      = DirectX::XMConvertToRadians(verticalFovInDegrees);
@@ -244,15 +273,18 @@ struct Camera
     vertical   = 2 * -vBottomEdge * focusDist;
   }
 
-  DirectX::SimpleMath::Ray getRay(float u, float v) const
+  ptr::Ray getRay(float u, float v) const
   {
+    float r[4];
+    ctx.rand_sse(r);
+    float rayT = shutterOpenT + ((shutterCloseT - shutterOpenT) * r[0]);
+
     Vector3 pointOnLens = lensRadius * getRandomPointOnUnitDisc(ctx);
     Vector3 offset      = vRightAxis * pointOnLens.x + vUpAxis * pointOnLens.y;
+    Vector3 dir = (lower_left_corner + (u * horizontal) + (v * vertical))
+                  - (origin + offset);
 
-    return DirectX::SimpleMath::Ray(
-      origin + offset,
-      (lower_left_corner + (u * horizontal) + (v * vertical))
-        - (origin + offset));
+    return ptr::Ray(origin + offset, dir, rayT);
   }
 };
 
@@ -260,9 +292,17 @@ struct Camera
 struct Spheres
 {
   // Struct of Arrays layout (SoA)
-  std::vector<float> _x;
-  std::vector<float> _y;
-  std::vector<float> _z;
+  std::vector<float> _x1;    // Position at time t1
+  std::vector<float> _y1;
+  std::vector<float> _z1;
+
+  std::vector<float> _x2;    // Position at time t2
+  std::vector<float> _y2;
+  std::vector<float> _z2;
+
+  std::vector<float> _t1;
+  std::vector<float> _t2;
+
   std::vector<float> _radius;
   std::vector<Material> _material;
   std::vector<MaterialProperties> _materialProperties;
@@ -275,9 +315,46 @@ struct Spheres
     Material material,
     MaterialProperties matProperties)
   {
-    _x.push_back(x);
-    _y.push_back(y);
-    _z.push_back(z);
+    _x1.push_back(x);
+    _y1.push_back(y);
+    _z1.push_back(z);
+    _x2.push_back(x);
+    _y2.push_back(y);
+    _z2.push_back(z);
+
+    _t1.push_back(0.f);
+    _t2.push_back(1.f);
+
+    _radius.push_back(radius);
+    _material.push_back(material);
+    _materialProperties.push_back(matProperties);
+  }
+
+  void addMoving(
+    float x1,
+    float y1,
+    float z1,
+    float x2,
+    float y2,
+    float z2,
+    float t1,
+    float t2,
+    float radius,
+    Material material,
+    MaterialProperties matProperties)
+  {
+    assert(t1 != t2);    // Would cause divide by zero
+
+    _x1.push_back(x1);
+    _y1.push_back(y1);
+    _z1.push_back(z1);
+    _x2.push_back(x2);
+    _y2.push_back(y2);
+    _z2.push_back(z2);
+
+    _t1.push_back(t1);
+    _t2.push_back(t2);
+
     _radius.push_back(radius);
     _material.push_back(material);
     _materialProperties.push_back(matProperties);
@@ -285,14 +362,22 @@ struct Spheres
 
   void reserve(size_t count)
   {
-    _x.reserve(count);
-    _y.reserve(count);
-    _z.reserve(count);
+    _x2.reserve(count);
+    _y2.reserve(count);
+    _z2.reserve(count);
+
+    _x2.reserve(count);
+    _y2.reserve(count);
+    _z2.reserve(count);
+
+    _t1.reserve(count);
+    _t2.reserve(count);
+
     _radius.reserve(count);
     _material.reserve(count);
   }
 
-  size_t size() const { return _x.size(); }
+  size_t size() const { return _x1.size(); }
 };
 
 //------------------------------------------------------------------------------
@@ -300,19 +385,15 @@ struct World
 {
   Spheres spheres;
 
-  bool empty() const { return spheres._x.empty(); }
+  bool empty() const { return spheres._x1.empty(); }
 };
 
 //------------------------------------------------------------------------------
 DirectX::SimpleMath::Color
 getColor(
-  ThreadContext& ctx,
-  const DirectX::SimpleMath::Ray& ray,
-  const World& world,
-  int recurseDepth = 0)
+  ThreadContext& ctx, const Ray& ray, const World& world, int recurseDepth = 0)
 {
   using DirectX::SimpleMath::Color;
-  using DirectX::SimpleMath::Ray;
   using DirectX::SimpleMath::Vector3;
 
   if (recurseDepth > ptr::MAX_RECURSION)
@@ -341,6 +422,8 @@ getColor(
   const Vec rayPosY = vec_set1(ray.position.y);
   const Vec rayPosZ = vec_set1(ray.position.z);
 
+  const Vec shutterTime = vec_set1(ray.shutterTime);
+
   const Vec zeros         = vec_zero();
   const Vec twos          = vec_set1(2.0f);
   const Vec fours         = vec_set1(4.0f);
@@ -352,9 +435,21 @@ getColor(
   {
     const Veci idxs = veci_set_iota(static_cast<int>(i));
 
-    const Vec posX = vec_load(&world.spheres._x[i]);
-    const Vec posY = vec_load(&world.spheres._y[i]);
-    const Vec posZ = vec_load(&world.spheres._z[i]);
+    const Vec posX1 = vec_load(&world.spheres._x1[i]);
+    const Vec posY1 = vec_load(&world.spheres._y1[i]);
+    const Vec posZ1 = vec_load(&world.spheres._z1[i]);
+
+    const Vec posX2 = vec_load(&world.spheres._x2[i]);
+    const Vec posY2 = vec_load(&world.spheres._y2[i]);
+    const Vec posZ2 = vec_load(&world.spheres._z2[i]);
+
+    const Vec t1 = vec_load(&world.spheres._t1[i]);
+    const Vec t2 = vec_load(&world.spheres._t2[i]);
+
+    const Vec lerpT = (shutterTime - t1) / (t2 - t1);
+    const Vec posX  = posX1 + ((posX2 - posX1) * lerpT);
+    const Vec posY  = posY1 + ((posY2 - posY1) * lerpT);
+    const Vec posZ  = posZ1 + ((posZ2 - posZ1) * lerpT);
 
     const Vec rayStartX = rayPosX - posX;
     const Vec rayStartY = rayPosY - posY;
@@ -516,7 +611,7 @@ getColor(
       Vector3 reflectDir    = reflectTo - adjustedHitPoint;
 
       scatter.attenuation = mat.albedo;
-      scatter.ray         = Ray(adjustedHitPoint, reflectDir);
+      scatter.ray         = Ray(adjustedHitPoint, reflectDir, ray.shutterTime);
       return scatter.attenuation
              * getColor(ctx, scatter.ray, world, ++recurseDepth);
     }
@@ -533,7 +628,8 @@ getColor(
       }
 
       scatter.attenuation = mat.albedo;
-      scatter.ray         = Ray(hitPoint + (EPSILON * normal), reflectDir);
+      scatter.ray
+        = Ray(hitPoint + (EPSILON * normal), reflectDir, ray.shutterTime);
       return scatter.attenuation
              * getColor(ctx, scatter.ray, world, ++recurseDepth);
     }
@@ -567,7 +663,8 @@ getColor(
       if (isReflected)
       {
         Vector3 reflectDir = reflect(ray.direction, normal);
-        scatter.ray        = Ray(hitPoint - refractOffset, reflectDir);
+        scatter.ray
+          = Ray(hitPoint - refractOffset, reflectDir, ray.shutterTime);
         return scatter.attenuation
                * getColor(ctx, scatter.ray, world, ++recurseDepth);
       }
@@ -575,13 +672,15 @@ getColor(
       // Refraction
       if (auto refracted = refract(-ray.direction, rayFacingNormal, ni_over_nt))
       {
-        scatter.ray = Ray(hitPoint + refractOffset, *refracted);
+        scatter.ray
+          = Ray(hitPoint + refractOffset, *refracted, ray.shutterTime);
       }
       else
       {
         // Fall-through case
         Vector3 reflectDir = reflect(ray.direction, rayFacingNormal);
-        scatter.ray        = Ray(hitPoint - refractOffset, reflectDir);
+        scatter.ray
+          = Ray(hitPoint - refractOffset, reflectDir, ray.shutterTime);
       }
 
       return scatter.attenuation
@@ -746,10 +845,15 @@ generateRandomScene()
           ctx.rand_sse(r);
           color = Color(r[0] * r[1], r[1] * r[2], r[2] * r[3]);
 
-          world.spheres.add(
+          world.spheres.addMoving(
             center.x,
             center.y,
             center.z,
+            center.x,
+            center.y + 3.0f,
+            center.z,
+            0.0f,
+            1.0f,
             RADIUS,
             Material::Lambertian,
             LambertianMatProperties{color});
