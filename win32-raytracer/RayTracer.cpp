@@ -1,6 +1,13 @@
 ﻿#include "pch.h"
 #include "RayTracer.h"
 
+#define AVX_ENABLED 1
+#if AVX_ENABLED
+#include "avx.h"
+#else
+#include "sse2.h"
+#endif
+
 #include "emmintrin.h"
 
 constexpr float EPSILON = 0.00001f;
@@ -10,6 +17,7 @@ static const __m128 F_MAX_VEC_MM    = _mm_cvtepi32_ps(INT_MAX_VEC_MM);
 static const __m128 VEC_UNIT_MM     = _mm_set1_ps(1.0f);
 static const __m128 VEC_HALF_MM     = _mm_set1_ps(0.5f);
 
+//------------------------------------------------------------------------------
 namespace ptr
 {
 //------------------------------------------------------------------------------
@@ -311,91 +319,78 @@ getColor(
   {
     return Color();
   }
-
   // Spheres test - find nearest object hit
-  __m128 curTs          = _mm_set1_ps(std::numeric_limits<float>::max());
-  __m128 curNormalX     = _mm_setzero_ps();
-  __m128 curNormalY     = _mm_setzero_ps();
-  __m128 curNormalZ     = _mm_setzero_ps();
-  __m128 curHitPointX   = _mm_setzero_ps();
-  __m128 curHitPointY   = _mm_setzero_ps();
-  __m128 curHitPointZ   = _mm_setzero_ps();
-  __m128 curIsHit       = _mm_setzero_ps();
-  __m128i curSphereIdxs = _mm_setzero_si128();
+  Vec curTs          = vec_set1(std::numeric_limits<float>::max());
+  Vec curNormalX     = vec_zero();
+  Vec curNormalY     = vec_zero();
+  Vec curNormalZ     = vec_zero();
+  Vec curHitPointX   = vec_zero();
+  Vec curHitPointY   = vec_zero();
+  Vec curHitPointZ   = vec_zero();
+  Vec curIsHit       = vec_zero();
+  Veci curSphereIdxs = veci_zero();
 
   const float rayDirDotScalar = ray.direction.Dot(ray.direction);
-  const __m128 rayDirDot      = _mm_set1_ps(rayDirDotScalar);
+  const Vec rayDirDot         = vec_set1(rayDirDotScalar);
 
-  const __m128 rayDirX = _mm_set1_ps(ray.direction.x);
-  const __m128 rayDirY = _mm_set1_ps(ray.direction.y);
-  const __m128 rayDirZ = _mm_set1_ps(ray.direction.z);
+  const Vec rayDirX = vec_set1(ray.direction.x);
+  const Vec rayDirY = vec_set1(ray.direction.y);
+  const Vec rayDirZ = vec_set1(ray.direction.z);
 
-  const __m128 rayPosX = _mm_set1_ps(ray.position.x);
-  const __m128 rayPosY = _mm_set1_ps(ray.position.y);
-  const __m128 rayPosZ = _mm_set1_ps(ray.position.z);
+  const Vec rayPosX = vec_set1(ray.position.x);
+  const Vec rayPosY = vec_set1(ray.position.y);
+  const Vec rayPosZ = vec_set1(ray.position.z);
 
-  const __m128 zeros         = _mm_setzero_ps();
-  const __m128 twos          = _mm_set1_ps(2.0f);
-  const __m128 fours         = _mm_set1_ps(4.0f);
-  const __m128 minThresholdT = _mm_set1_ps(0.001f);
+  const Vec zeros         = vec_zero();
+  const Vec twos          = vec_set1(2.0f);
+  const Vec fours         = vec_set1(4.0f);
+  const Vec minThresholdT = vec_set1(0.001f);
 
   // TODO : handle non-multiples of 4 (i.e. if there are 5, only 4 will appear)
-  for (size_t i = 0; i + 3 < world.spheres.size(); i += 4)
+  for (size_t i = 0; i + (XMM_REG_COUNT - 1) < world.spheres.size();
+       i += XMM_REG_COUNT)
   {
-    const int idx      = static_cast<int>(i);
-    const __m128i idxs = _mm_set_epi32(idx + 3, idx + 2, idx + 1, idx);
+    const Veci idxs = veci_set_iota(static_cast<int>(i));
 
-    const __m128 posX = _mm_load_ps(&world.spheres._x[i]);
-    const __m128 posY = _mm_load_ps(&world.spheres._y[i]);
-    const __m128 posZ = _mm_load_ps(&world.spheres._z[i]);
+    const Vec posX = vec_load(&world.spheres._x[i]);
+    const Vec posY = vec_load(&world.spheres._y[i]);
+    const Vec posZ = vec_load(&world.spheres._z[i]);
 
-    const __m128 rayStartX = _mm_sub_ps(rayPosX, posX);
-    const __m128 rayStartY = _mm_sub_ps(rayPosY, posY);
-    const __m128 rayStartZ = _mm_sub_ps(rayPosZ, posZ);
+    const Vec rayStartX = rayPosX - posX;
+    const Vec rayStartY = rayPosY - posY;
+    const Vec rayStartZ = rayPosZ - posZ;
 
     // DOT PRODUCT ray.direction.Dot(rayStart)
-    __m128 dx             = _mm_mul_ps(rayDirX, rayStartX);
-    __m128 dy             = _mm_mul_ps(rayDirY, rayStartY);
-    __m128 dz             = _mm_mul_ps(rayDirZ, rayStartZ);
-    __m128 sum            = _mm_add_ps(dx, dy);
-    __m128 rayDirDotStart = _mm_add_ps(sum, dz);
+    Vec rayDirDotStart
+      = rayDirX * rayStartX + rayDirY * rayStartY + rayDirZ * rayStartZ;
 
-    __m128 radius   = _mm_load_ps(&world.spheres._radius[i]);
-    __m128 radiusSq = _mm_mul_ps(radius, radius);
+    Vec radius   = vec_load(&world.spheres._radius[i]);
+    Vec radiusSq = radius * radius;
 
     // DOT PRODUCT rayStart.direction.Dot(rayStart)
-    __m128 dx_           = _mm_mul_ps(rayStartX, rayStartX);
-    __m128 dy_           = _mm_mul_ps(rayStartY, rayStartY);
-    __m128 dz_           = _mm_mul_ps(rayStartZ, rayStartZ);
-    __m128 sum_          = _mm_add_ps(dx_, dy_);
-    __m128 startDotStart = _mm_add_ps(sum_, dz_);
+    Vec startDotStart
+      = rayStartX * rayStartX + rayStartY * rayStartY + rayStartZ * rayStartZ;
 
     // discriminant  = b * b - 4.0f * a * c;
-    __m128 a = rayDirDot;
-    __m128 b = _mm_mul_ps(rayDirDotStart, twos);
-    __m128 c = _mm_sub_ps(startDotStart, radiusSq);
-
-    __m128 bSq          = _mm_mul_ps(b, b);
-    __m128 ac           = _mm_mul_ps(a, c);
-    __m128 fourAc       = _mm_mul_ps(ac, fours);
-    __m128 discriminant = _mm_sub_ps(bSq, fourAc);
+    Vec a            = rayDirDot;
+    Vec b            = rayDirDotStart * twos;
+    Vec c            = startDotStart - radiusSq;
+    Vec discriminant = b * b - fours * a * c;
 
     // if (discriminant < 0.0f) continue
     // here: if ANY single register is greater than or equal to zero,
     // then continue
-    __m128 isDiscrimInRange = _mm_cmpge_ps(discriminant, zeros);
-    int isAnyDiscrimInRange = _mm_movemask_ps(isDiscrimInRange);
+    Vec isDiscrimInRange    = discriminant >= zeros;
+    int isAnyDiscrimInRange = vec_moveMask(isDiscrimInRange);
     if (isAnyDiscrimInRange == 0)
     {
       continue;
     }
 
     // t = (-b - sqrtDiscrim) / (2.0f * a);
-    const __m128 bNeg             = _mm_sub_ps(zeros, b);
-    const __m128 discrimSqrt      = _mm_sqrt_ps(discriminant);
-    const __m128 bNegMinusDiscrim = _mm_sub_ps(bNeg, discrimSqrt);
-    const __m128 twoA             = _mm_mul_ps(a, twos);
-    __m128 t                      = _mm_div_ps(bNegMinusDiscrim, twoA);
+    const Vec bNeg        = zeros - b;
+    const Vec discrimSqrt = vec_sqrt(discriminant);
+    Vec t                 = (bNeg - discrimSqrt) / (a * twos);
 
     // Filter out individual register results
     //---------------------------------------
@@ -414,101 +409,76 @@ getColor(
     //  }
     //}
     // t = (-b + sqrtDiscrim) / (2.0f * a);
-    // const __m128 bNegPlusDiscrim = _mm_add_ps(bNeg, discrimSqrt);
-    // const __m128 tBack                = _mm_div_ps(bNegPlusDiscrim, twoA);
+    // const Vec bNegPlusDiscrim = _mm_add_ps(bNeg, discrimSqrt);
+    // const Vec tBack                = _mm_div_ps(bNegPlusDiscrim, twoA);
     // t = tBack (when isTBackInRange and !isTInRange)
     // update isTInRange
     //------------------------
 
-    const __m128 isTAboveMin   = _mm_cmpgt_ps(t, minThresholdT);
-    const __m128 isTBelowMax   = _mm_cmplt_ps(t, curTs);
-    const __m128 isTInRange    = _mm_and_ps(isTAboveMin, isTBelowMax);
-    const __m128 isNewNearestT = _mm_and_ps(isDiscrimInRange, isTInRange);
-    int isAnyTNew              = _mm_movemask_ps(isNewNearestT);
+    const Vec isTAboveMin   = t > minThresholdT;
+    const Vec isTBelowMax   = t < curTs;
+    const Vec isTInRange    = isTAboveMin & isTBelowMax;
+    const Vec isNewNearestT = isDiscrimInRange & isTInRange;
+    int isAnyTNew           = vec_moveMask(isNewNearestT);
     if (isAnyTNew == 0)
     {
       continue;    // Early out, if no register has an interesting t
     }
 
-    curIsHit = _mm_or_ps(isNewNearestT, curIsHit);
+    curIsHit = isNewNearestT | curIsHit;
 
     // hitPoint  = ray.position + (t * ray.direction);
-    __m128 hitPointX = _mm_mul_ps(t, rayDirX);
-    __m128 hitPointY = _mm_mul_ps(t, rayDirY);
-    __m128 hitPointZ = _mm_mul_ps(t, rayDirZ);
-    hitPointX        = _mm_add_ps(hitPointX, rayPosX);
-    hitPointY        = _mm_add_ps(hitPointY, rayPosY);
-    hitPointZ        = _mm_add_ps(hitPointZ, rayPosZ);
+    Vec hitPointX = rayPosX + (t * rayDirX);
+    Vec hitPointY = rayPosY + (t * rayDirY);
+    Vec hitPointZ = rayPosZ + (t * rayDirZ);
 
     // normal    = (ret.hitPoint - center) / radius;
-    __m128 normalX = _mm_sub_ps(hitPointX, posX);
-    __m128 normalY = _mm_sub_ps(hitPointY, posY);
-    __m128 normalZ = _mm_sub_ps(hitPointZ, posZ);
-    normalX        = _mm_div_ps(normalX, radius);
-    normalY        = _mm_div_ps(normalY, radius);
-    normalZ        = _mm_div_ps(normalZ, radius);
+    Vec normalX = (hitPointX - posX) / radius;
+    Vec normalY = (hitPointY - posY) / radius;
+    Vec normalZ = (hitPointZ - posZ) / radius;
 
-    // Update the currentTs in 3 steps
-    // 1) Zero out values in currentTs, that are to be updated with new values
-    const __m128 maskedTs = _mm_andnot_ps(isNewNearestT, curTs);
-    // 2) Zero out values in newTs(t) that will not be kept
-    const __m128 newTs = _mm_and_ps(isNewNearestT, t);
-    // 3) Combine the values that are to be retained
-    curTs = _mm_or_ps(maskedTs, newTs);
+    // Update the current nearest T
+    conditionalAssign(curTs, t, isNewNearestT);
 
-    // Repeat above process to update the current sphere indices
-    const __m128i isNewT_si  = _mm_castps_si128(isNewNearestT);
-    const __m128i maskedIdxs = _mm_andnot_si128(isNewT_si, curSphereIdxs);
-    const __m128i newIdxs    = _mm_and_si128(isNewT_si, idxs);
-    curSphereIdxs            = _mm_or_si128(maskedIdxs, newIdxs);
+    // Update the current sphere indices
+    conditionalAssign(curSphereIdxs, idxs, to_Veci(isNewNearestT));
 
-    // Repeat above process to update the current normals
-    const __m128 maskedNormalX = _mm_andnot_ps(isNewNearestT, curNormalX);
-    const __m128 maskedNormalY = _mm_andnot_ps(isNewNearestT, curNormalY);
-    const __m128 maskedNormalZ = _mm_andnot_ps(isNewNearestT, curNormalZ);
-    const __m128 newNormalX    = _mm_and_ps(isNewNearestT, normalX);
-    const __m128 newNormalY    = _mm_and_ps(isNewNearestT, normalY);
-    const __m128 newNormalZ    = _mm_and_ps(isNewNearestT, normalZ);
-    curNormalX                 = _mm_or_ps(maskedNormalX, newNormalX);
-    curNormalY                 = _mm_or_ps(maskedNormalY, newNormalY);
-    curNormalZ                 = _mm_or_ps(maskedNormalZ, newNormalZ);
+    // Update the current normals
+    conditionalAssign(curNormalX, normalX, isNewNearestT);
+    conditionalAssign(curNormalY, normalY, isNewNearestT);
+    conditionalAssign(curNormalZ, normalZ, isNewNearestT);
 
     // Repeat above process to update the current hitPoints
-    const __m128 maskedHitX = _mm_andnot_ps(isNewNearestT, curHitPointX);
-    const __m128 maskedHitY = _mm_andnot_ps(isNewNearestT, curHitPointY);
-    const __m128 maskedHitZ = _mm_andnot_ps(isNewNearestT, curHitPointZ);
-    const __m128 newHitX    = _mm_and_ps(isNewNearestT, hitPointX);
-    const __m128 newHitY    = _mm_and_ps(isNewNearestT, hitPointY);
-    const __m128 newHitZ    = _mm_and_ps(isNewNearestT, hitPointZ);
-    curHitPointX            = _mm_or_ps(maskedHitX, newHitX);
-    curHitPointY            = _mm_or_ps(maskedHitY, newHitY);
-    curHitPointZ            = _mm_or_ps(maskedHitZ, newHitZ);
+    conditionalAssign(curHitPointX, hitPointX, isNewNearestT);
+    conditionalAssign(curHitPointY, hitPointY, isNewNearestT);
+    conditionalAssign(curHitPointZ, hitPointZ, isNewNearestT);
+
   }    // for world.spheres.size()
 
-  __declspec(align(16)) float t_vec[4];
-  __declspec(align(16)) float normalX[4];
-  __declspec(align(16)) float normalY[4];
-  __declspec(align(16)) float normalZ[4];
-  __declspec(align(16)) float hitPointX[4];
-  __declspec(align(16)) float hitPointY[4];
-  __declspec(align(16)) float hitPointZ[4];
-  __declspec(align(16)) int32_t idxs[4];
+  __declspec(align(16)) float t_vec[XMM_REG_COUNT];
+  __declspec(align(16)) float normalX[XMM_REG_COUNT];
+  __declspec(align(16)) float normalY[XMM_REG_COUNT];
+  __declspec(align(16)) float normalZ[XMM_REG_COUNT];
+  __declspec(align(16)) float hitPointX[XMM_REG_COUNT];
+  __declspec(align(16)) float hitPointY[XMM_REG_COUNT];
+  __declspec(align(16)) float hitPointZ[XMM_REG_COUNT];
+  __declspec(align(16)) int32_t idxs[XMM_REG_COUNT];
 
-  _mm_store_ps(t_vec, curTs);
-  _mm_store_si128((__m128i*)idxs, curSphereIdxs);
-  _mm_store_ps(normalX, curNormalX);
-  _mm_store_ps(normalY, curNormalY);
-  _mm_store_ps(normalZ, curNormalZ);
-  _mm_store_ps(hitPointX, curHitPointX);
-  _mm_store_ps(hitPointY, curHitPointY);
-  _mm_store_ps(hitPointZ, curHitPointZ);
+  vec_store(t_vec, curTs);
+  veci_store(idxs, curSphereIdxs);
+  vec_store(normalX, curNormalX);
+  vec_store(normalY, curNormalY);
+  vec_store(normalZ, curNormalZ);
+  vec_store(hitPointX, curHitPointX);
+  vec_store(hitPointY, curHitPointY);
+  vec_store(hitPointZ, curHitPointZ);
 
-  // Compare 4 register results to find first hitpoint
-  int hitMask         = _mm_movemask_ps(curIsHit);
+  // Compare all wide register results to find first hitpoint
+  int hitMask         = vec_moveMask(curIsHit);
   int hitIndex        = -1;    // -1 means: no hit
   int32_t sphereIndex = -1;
   float curT          = std::numeric_limits<float>::max();
-  for (int r = 0; r < 4; ++r)
+  for (int r = 0; r < XMM_REG_COUNT; ++r)
   {
     if (hitMask & (0x1 << r))
     {
@@ -902,8 +872,8 @@ render(const int imageWidth, const int imageHeight, const int numSamples)
   // and one thread working on the bottom of the image (usually complex).
   // This balances more the work across threads and prevents one thread left
   // working alone, while the others are finished and doing nothing to help.
-  const int blockSizeY  = 8;
-  const int strideSizeY = NUM_THREADS * blockSizeY;
+  const int blockSizeY   = 8;
+  const int strideSizeY  = NUM_THREADS * blockSizeY;
   const size_t numBlocks = (size_t)(ceilf(imageHeight / (float)blockSizeY));
   res.imageParts.resize(numBlocks);
 
